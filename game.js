@@ -1,4 +1,4 @@
-// Neon Talon v0.1.1 — 3D neon aerial dogfighter (Three.js 0.160.0).
+// Neon Talon v0.1.2 — 3D neon aerial dogfighter (Three.js 0.160.0).
 // Fly a neon interceptor through canyon runs; guns and lock-on
 // missiles take down drones, interceptors and turrets; boost builds
 // heat, and heat management is the skill. Carriers fill the canyon
@@ -570,16 +570,20 @@ function updateParticles(dt) {
 }
 
 // ---------- feedback (game-feel tiers) ----------
-function pushFeedback(type) {
+function pushFeedback(type, ev) {
   const layers = FEEDBACK_LAYERS[type] || [];
-  feedbackLog.push({ type, layers: [...layers] });
+  // v0.1.2: keep the event kind on the log entry — the render check
+  // observes locks through this durable log (a live lockedId is
+  // transient: a carrier lock lasts a few frames before the bot fires
+  // on it, so polling state.lockedId misses it under slow rendering).
+  feedbackLog.push({ type, layers: [...layers], kind: ev?.kind ?? null });
   if (feedbackLog.length > 200) feedbackLog.shift();
   return layers;
 }
 function applyFeedback(type, ev) {
   const fb = FEEDBACK[type];
   if (!fb) return;
-  const layers = pushFeedback(type);
+  const layers = pushFeedback(type, ev);
   const has = (l) => layers.includes(l);
   if (has('shake')) trauma = Math.min(1, trauma + fb.trauma * shakeStrength);
   if (fb.hitStop > 0 && has('hitStop')) {
@@ -603,7 +607,10 @@ function toast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.remove('show'), 2400);
+  // v0.1.2: clear the text when the toast hides, so the stale message
+  // doesn't linger in the page text (and the live region) on the
+  // death screen and the menu after the run ends.
+  toast._t = setTimeout(() => { el.classList.remove('show'); el.textContent = ''; }, 2400);
   $('sr-status').textContent = msg;
 }
 // Directional damage edge (v0.1.1, live-playtest fix): a hit must say
@@ -933,6 +940,13 @@ function onRunEnd() {
     $('hud').classList.add('hidden');
     pushScreen('complete');
   } else {
+    // v0.1.2: a loss still records the best (score/kills, cleared
+    // stays false) — the menu promised "your best result is saved per
+    // sortie", but bests were only written on a clear, so after dozens
+    // of flights the menu still said "Not flown yet". Unlocks stay
+    // clear-gated (isSortieUnlocked needs cleared === true).
+    recordBest(save, sortie.id, run.score, run.kills, false);
+    persistSave();
     const best = save.best[sortie.id];
     $('sortielost-stats').textContent = `${run.kills} kills · reached ${Math.floor((run.z / sortie.length) * 100)}% of the canyon`;
     $('sortielost-best').textContent = best ? `Best on this sortie: ${best.score}` : 'No best yet on this sortie.';
@@ -1345,7 +1359,7 @@ window.__talon = {
       trauma, timeScale, fov: camera.fov, fovPulse,
       shakeAmp: trauma * trauma * shakeStrength,
       perf: { fps: Math.round(fpsEma), pixelRatio: renderer ? renderer.getPixelRatio() : null, level: perfLevel },
-      feedback: feedbackLog.map((f) => ({ type: f.type, layers: [...f.layers] })),
+      feedback: feedbackLog.map((f) => ({ type: f.type, layers: [...f.layers], kind: f.kind ?? null })),
       audio: audioCtx
         ? { state: audioCtx.state, music: !!musicTimer, musicStep, lead: musicLeadOn, sfxOn: save.sfx, musicOn: save.music }
         : null,

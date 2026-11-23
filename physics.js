@@ -14,7 +14,7 @@
 // real flying decisions: a bot that flies straight and holds fire
 // LOSES on every sortie (see tests/bot.js).
 
-export const VERSION = '0.1.1';
+export const VERSION = '0.1.2';
 export const DT = 1 / 60;
 export const HULL_MAX = 100;
 export const HEAT_MAX = 100;
@@ -104,11 +104,19 @@ export const SORTIES = [
     theme: { ring: '#22d3ee', glow: '#0e7490', accent: '#f472b6', disc: '#0b1030', tint: '#67e8f9' },
     length: 700,
     segments: [
-      { z0: 0, z1: 150, cx: 0, hw: 9, floor: 2, ceil: 16 },
-      { z0: 150, z1: 300, cx: 6, hw: 8, floor: 2, ceil: 16 },
-      { z0: 300, z1: 450, cx: -6, hw: 8, floor: 2, ceil: 16 },
-      { z0: 450, z1: 600, cx: 5, hw: 8, floor: 2, ceil: 16 },
-      { z0: 600, z1: 700, cx: 0, hw: 9, floor: 2, ceil: 16 },
+      // v0.1.2 teaching runway (live-playtest fix): the opening is
+      // straight to z=220 and the first bends are gentle (±4, not
+      // ±6). In v0.1.1 the centre swung to +6 at z=150 — a ship that
+      // hadn't started steering yet was already in the scrape band
+      // the moment spawn protection ended, so a new player was
+      // punished before they had flown. A straight ship still never
+      // clears: drones ram, turrets shoot, and the carrier at 640
+      // blocks the canyon — the straight-line bot gate still holds.
+      { z0: 0, z1: 220, cx: 0, hw: 9, floor: 2, ceil: 16 },
+      { z0: 220, z1: 380, cx: 4, hw: 8, floor: 2, ceil: 16 },
+      { z0: 380, z1: 520, cx: -4, hw: 8, floor: 2, ceil: 16 },
+      { z0: 520, z1: 620, cx: 3, hw: 8, floor: 2, ceil: 16 },
+      { z0: 620, z1: 700, cx: 0, hw: 9, floor: 2, ceil: 16 },
     ],
     spawns: [
       { at: 80, type: 'drone', count: 3, dx: 0, dy: 9, spread: 3 },
@@ -264,7 +272,7 @@ export function createRun(sortie, seed) {
     score: 0, kills: 0, shotsFired: 0, shotsHit: 0,
     missilesFired: 0, missilesHit: 0, ammo: MISSILE_AMMO,
     blocked: false, blockTimer: 0,
-    lockTargetId: null, lockT: 0, lockedId: null, lockLoseT: 0,
+    lockTargetId: null, lockT: 0, lockedId: null, lockLoseT: 0, lockMemoryT: 0,
     gunCd: 0,
     enemies: [], projectiles: [], missiles: [],
     spawnQueue, nextEnemyId: 1,
@@ -350,6 +358,27 @@ function spawnEnemy(run, spec) {
   return e;
 }
 
+// Every enemy removal settles the lock the same way (v0.1.2 lock
+// memory): a lock whose target vanishes — shot down, rammed, or flown
+// past — keeps 0.4s of re-lock credit, and a FULL lock is remembered
+// for 0.75s so an E press in the next beat still fires (see the
+// missile section). Before this, the ram and despawn paths never
+// touched the lock at all: a locked drone that rammed the ship left
+// lockedId dangling at a removed enemy, so the reticle stayed gold
+// with "LOCK" showing while E silently did nothing — the live
+// playtest's "E never fires", reproduced in the render check. A lock
+// lost because the target left the reticle does NOT set memory —
+// the 2.5s lock grace already covers that — and a partial lock
+// (lockTargetId only) never earned a missile, so it sets none either.
+function clearLockOnRemoval(run, e) {
+  if (run.lockedId === e.id) {
+    run.lockedId = null; run.lockTargetId = null; run.lockT = 0.4; run.lockLoseT = 0;
+    run.lockMemoryT = 0.75;
+  } else if (run.lockTargetId === e.id) {
+    run.lockTargetId = null; run.lockT = 0.4; run.lockLoseT = 0;
+  }
+}
+
 function damageEnemy(run, e, dmg, events, source) {
   e.hp -= dmg;
   if (e.hp > 0) return false;
@@ -363,8 +392,7 @@ function damageEnemy(run, e, dmg, events, source) {
   run.streakTimer = 3;
   run.bestStreak = Math.max(run.bestStreak, run.streak);
   if (e.type === 'carrier') run.ammo = Math.min(run.ammo + 2, MISSILE_AMMO_MAX);
-  if (run.lockedId === e.id) { run.lockedId = null; run.lockT = 0; }
-  if (run.lockTargetId === e.id) { run.lockTargetId = null; run.lockT = 0; }
+  clearLockOnRemoval(run, e);
   events.push({ type: 'kill', kind: e.type, x: e.x, y: e.y, z: e.z, score: def.score, streak: run.streak, source: source || 'guns' });
   if (run.streak >= 3) events.push({ type: 'killStreak', streak: run.streak, x: e.x, y: e.y, z: e.z });
   return true;
@@ -498,6 +526,10 @@ export function stepRun(run, dt = DT) {
     && (!retTarget || LOCK_PRIO[curLock.type] <= LOCK_PRIO[retTarget.type])) {
     retTarget = curLock;
   }
+  // Lock memory decays with the sim (set when a full lock's target
+  // dies; see damageEnemy). It is consumed by firing, and a fresh
+  // full lock supersedes it.
+  if (run.lockMemoryT > 0) run.lockMemoryT = Math.max(0, run.lockMemoryT - dt);
   if (retTarget) {
     if (run.lockTargetId === retTarget.id) {
       run.lockT += dt;
@@ -508,6 +540,7 @@ export function stepRun(run, dt = DT) {
     run.lockLoseT = 0;
     if (run.lockT >= LOCK_TIME && run.lockedId !== retTarget.id) {
       run.lockedId = retTarget.id;
+      run.lockMemoryT = 0;
       events.push({ type: 'lockAcquired', targetId: retTarget.id, kind: retTarget.type });
     }
   } else {
@@ -515,7 +548,11 @@ export function stepRun(run, dt = DT) {
     if (run.lockT === 0) run.lockTargetId = null;
     if (run.lockedId !== null) {
       run.lockLoseT += dt;
-      if (run.lockLoseT >= 1.5) { run.lockedId = null; run.lockT = 0; run.lockLoseT = 0; }
+      // Lock grace (v0.1.2: 1.5s -> 2.5s): a lock survives a couple
+      // of seconds out of the reticle, so an E press that lands just
+      // after the target slips off still fires at the live target
+      // instead of silently doing nothing.
+      if (run.lockLoseT >= 2.5) { run.lockedId = null; run.lockT = 0; run.lockLoseT = 0; }
     }
   }
 
@@ -549,10 +586,23 @@ export function stepRun(run, dt = DT) {
   // eight steps and has nothing left for the second one.
   if (inp.missile) {
     run.input.missile = false;
-    const target = run.enemies.find((e) => e.id === run.lockedId);
+    let target = run.enemies.find((e) => e.id === run.lockedId);
+    // Lock memory (v0.1.2): a full lock whose target just died to
+    // gunfire still counts for 0.75s — fire at the target now being
+    // re-locked, provided it already carries 0.3s of lock credit (the
+    // credit a target switch banks: min(lockT, 0.3)). Without this,
+    // the E press that lands in the beat after the locked drone dies
+    // finds lockedId null and silently does nothing, which is exactly
+    // what the live playtest reported. The lock was earned — a full
+    // 0.8s hold — and the new target must be in the reticle; this is
+    // a transfer of an earned lock, not a free missile.
+    if (!target && run.lockMemoryT > 0 && run.lockTargetId !== null && run.lockT >= 0.3) {
+      target = run.enemies.find((e) => e.id === run.lockTargetId);
+    }
     if (target && run.ammo > 0) {
       run.ammo--;
       run.missilesFired++;
+      run.lockMemoryT = 0;
       run.missiles.push({ x: run.x, y: run.y, z: run.z, targetId: target.id, life: 4 });
       events.push({ type: 'missileFire', targetId: target.id, kind: target.type, ammo: run.ammo });
       // Firing keeps partial lock credit (0.4s): the player re-locks
@@ -610,6 +660,7 @@ export function stepRun(run, dt = DT) {
     if (e.type === 'drone' || e.type === 'interceptor') {
       if (d2 < 2.2 * 2.2) {
         const def = ENEMY_DEFS[e.type];
+        clearLockOnRemoval(run, e);
         run.enemies.splice(run.enemies.indexOf(e), 1);
         events.push({ type: 'ram', kind: e.type, x: e.x, y: e.y, z: e.z });
         damagePlayer(run, def.ramDamage ?? 10, events, 'ram');
@@ -642,7 +693,7 @@ export function stepRun(run, dt = DT) {
       }
     }
     // Enemies left behind despawn silently.
-    if (dz < -25) run.enemies.splice(run.enemies.indexOf(e), 1);
+    if (dz < -25) { clearLockOnRemoval(run, e); run.enemies.splice(run.enemies.indexOf(e), 1); }
   }
 
   // --- enemy projectiles ---
