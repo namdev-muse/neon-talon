@@ -283,3 +283,62 @@ guns-only loses all 3.
   inspected by eye — no clipping or overlap. Portrait still leaves
   a large empty sky band above the canyon (carried known issue);
   canyon reads flat/stark in places (M3 visual-richness item).
+
+## v0.1.4 — re-playtest NO-GO, steering model v3 (2026-11-23, 15:30 run continued)
+
+Live v0.1.3 re-playtest (17:08–17:17 +07): NO-GO. Chase-the-cursor
+fails in the exact way v0.1.2 did: 11 sortie-1 runs + 1 sortie-2
+sample, 0 clears, best 56%. Pointing at the tunnel mouth makes
+the ship climb gently and then out of the canyon. The playtest
+identified the structural cause, and it is right: with a chase
+camera the ship stays fixed at the bottom-centre of the screen,
+so a cursor at the tunnel mouth is always ~250px above the ship
+— the climb command never turns off, and the ship can never get
+"under" the cursor. The v0.1.3 mental model was wrong: the ship
+does not move toward the cursor on screen; the chase camera keeps
+it anchored and the WORLD moves. Combat works and is the fun part
+(guns: 3 kills / score 300; missiles on E and right-click, count
+drops 8→7). R and Enter restart from the death screen CONFIRMED.
+Bests persist. The toast "timing caveat" is NOT a defect, checked
+against the code: the pill was visible in a frame where Hull was
+2 — the run had not ended yet, so the toast was correctly showing
+a live warning; `onRunEnd` hides it synchronously in the same
+frame `run.done` is set, and the settled death screen shows no
+toast in every run. The version-label request is declined by
+design: the menu shows no version/engine text on player-facing
+screens (standing rule) — the version is confirmed by curl, and
+the playtest brief was wrong to promise a menu version label.
+
+Fixes (v0.1.4):
+- Steering model v3: screen-centre-relative with a dead zone.
+  The ship steers by the cursor's offset from the centre of the
+  screen — the tunnel mouth ahead sits at the screen centre (the
+  reticle and the canyon vanishing point coincide there), so
+  pointing at it flies level; moving the cursor from there steers.
+  Dead zone 0.2 of the half-dimension (~10% of the screen) around
+  the centre, then a smooth ramp to full deflection at the edge.
+  Steering arms only once the cursor has moved 30px from where it
+  sat at launch (the v0.1.0 spawn trap: the resting cursor over
+  the Play button is left of centre). `lastPointer` tracking is
+  back; `centreSteer()` helper in the canvas wiring.
+- Enemy shots bigger (sphere r 0.32 → 0.45) for distance
+  readability. Sortie-2 gold/orange rims vs orange fire is a
+  carried M3 note (the rim colour is the sortie accent).
+- How to Play now says where the cursor needs to be: "keep it
+  near the centre, on the tunnel mouth ahead, to fly level".
+
+Tests (final tree): node --check PASS (game, physics, all tests);
+smoke 162 checks PASS; bot PASS — decision clears all 3 (S1 23.8s
+score 4286 hull 94, S2 27.6s score 4095 hull 84, S3 33.9s score
+4367 hull 32), straight-line loses all 3, guns-only loses all 3.
+- render-check: PASS on the first run, zero console errors. Mouse
+  steer works under screen-centre steering (steerX -0.61 at the
+  left edge, exactly the designed curve); the gun test passes with
+  the mouse neutralised on the screen centre; hook missile 8→7,
+  manual E 7→6, autopilot clears sortie 1 (Score 4286), Next
+  Sortie unlocks sortie 2, ?sortie=3 reaches Widow's Spine,
+  accessibility persists, FPS guard steps the pixel ratio, R
+  restarts from the death screen with the scrape toast live.
+- Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
+  inspected by eye — no clipping or overlap. Portrait still leaves
+  a large empty sky band above the canyon (carried known issue).
