@@ -1,4 +1,4 @@
-// Neon Talon v0.1.1 — headless browser render check.
+// Neon Talon v0.1.2 — headless browser render check.
 // Serves the game dir over local HTTP, loads it in a headless browser, and
 // asserts the M1 core, by hook and by eye:
 //   - the menu renders over a LIVE 3D scene (the attract demo actually
@@ -137,8 +137,8 @@ try {
   }
 
   const version = await page.evaluate(() => window.__talon.version);
-  if (version !== '0.1.1') fail(`expected version 0.1.1, got ${version}`);
-  console.log('render-check: game module initialised, version 0.1.1');
+  if (version !== '0.1.2') fail(`expected version 0.1.2, got ${version}`);
+  console.log('render-check: game module initialised, version 0.1.2');
 
   // WebGL context exists and the canvas is on screen.
   const gl = await page.evaluate(() => {
@@ -275,21 +275,100 @@ try {
   await page.screenshot({ path: path.join(SHOTS_DIR, 'gameplay-1280x720.png') });
   console.log(`render-check: gameplay screenshot saved to ${SHOTS_DIR}/gameplay-1280x720.png — INSPECT BY EYE`);
 
-  // Lock-on + missile: the autopilot flies and locks; firing a
-  // missile on the lock spends ammo.
-  await page.evaluate(() => { window.__talon.restart(); window.__talon.setSpeed(4); window.__talon.autopilot(true); });
-  await page.waitForFunction(() => window.__talon.state.lockedId !== null, null, { timeout: 120000 });
-  const ammo0 = await page.evaluate(() => window.__talon.state.ammo);
-  await page.evaluate(() => window.__talon.fireMissile());
-  await page.waitForFunction((a0) => window.__talon.state.ammo < a0, ammo0, { timeout: 5000 });
-  const ammo1 = await page.evaluate(() => window.__talon.state.ammo);
+  // Lock-on + missile: firing a missile on the lock spends ammo.
+  // Observe the lock through the DURABLE feedback log (a live
+  // lockedId is transient: the bot fires on a carrier lock within a
+  // few frames, so polling state.lockedId misses it under slow
+  // rendering — the v0.1.2 check failed exactly that way twice).
+  // Do NOT use the autopilot here: it shoots the locked drone dead
+  // in ~0.4s and never holds a turret in the reticle (wall turrets
+  // sit outside the cone from the centre lane), so a turret-only
+  // wait never resolves either — run 3 burned 3x120s on it. Instead
+  // the ship flies straight with guns silent at 1x: the first drones
+  // drift into the reticle and lock in ~0.8s, and with no gunfire
+  // the lock lives ~1.7s (until the drone rams), which is ample for
+  // the pause below. Then PAUSE to freeze the sim with the lock
+  // live, verify it, and fire — resume and fireMissile() in one
+  // evaluate so no frame can eat the lock first.
+  await page.evaluate(() => { window.__talon.restart(); window.__talon.setSpeed(1); window.__talon.autopilot(false); });
+  let ammo0 = null, ammo1 = null;
+  for (let attempt = 0; attempt < 3 && ammo1 === null; attempt++) {
+    await page.evaluate(() => {
+      if (window.__talon.state.phase !== 'run') { window.__talon.restart(); window.__talon.setSpeed(1); }
+      window.__talon.autopilot(false);
+    });
+    const mark = await page.evaluate(() => window.__talon.info().feedback.length);
+    try {
+      await page.waitForFunction((m) => window.__talon.info()
+        && window.__talon.info().feedback.slice(m).some((f) => f.type === 'lockAcquired'),
+      mark, { timeout: 30000 });
+    } catch { continue; }
+    await page.evaluate(() => window.__talon.pause());
+    const lock = await page.evaluate(() => {
+      const s = window.__talon.state;
+      if (s.phase !== 'run' || s.lockedId === null) return null;
+      const t = window.__talon.info().enemies.find((e) => e.id === s.lockedId);
+      return t ? { id: t.id, type: t.type } : null;
+    });
+    if (!lock) { await page.evaluate(() => { if (window.__talon.state.paused) window.__talon.resume(); }); continue; }
+    ammo0 = await page.evaluate(() => window.__talon.state.ammo);
+    await page.evaluate(() => { window.__talon.resume(); window.__talon.fireMissile(); });
+    try {
+      await page.waitForFunction((a0) => window.__talon.state.ammo < a0, ammo0, { timeout: 5000 });
+      ammo1 = await page.evaluate(() => window.__talon.state.ammo);
+    } catch { /* lock died before the fire landed; re-lock and retry */ }
+  }
+  if (ammo1 === null) fail('hook fireMissile() did not spend ammo on a lock after 3 attempts');
   console.log(`render-check: lock acquired, missile fired on the lock — ammo ${ammo0} -> ${ammo1}`);
+
+  // Manual E (v0.1.2 regression test): the live playtest reported E
+  // never firing. The hook path above is not the E path — prove the
+  // real key works in manual play, with the same durable-event +
+  // pause-freeze pattern: the ship flies straight with guns silent
+  // at 1x, a drone locks, the sim freezes with the lock live, then
+  // resume and press E with a real keyboard event. The 2.5s lock
+  // grace covers the resume-to-keypress gap.
+  let ammoBeforeE = null, ammoAfterE = null;
+  for (let attempt = 0; attempt < 3 && ammoAfterE === null; attempt++) {
+    await page.evaluate(() => {
+      if (window.__talon.state.phase !== 'run') { window.__talon.restart(); window.__talon.setSpeed(1); }
+      window.__talon.autopilot(false);
+    });
+    const mark = await page.evaluate(() => window.__talon.info().feedback.length);
+    try {
+      await page.waitForFunction((m) => window.__talon.info()
+        && window.__talon.info().feedback.slice(m).some((f) => f.type === 'lockAcquired'),
+      mark, { timeout: 30000 });
+    } catch { continue; }
+    await page.evaluate(() => window.__talon.pause());
+    const lock = await page.evaluate(() => {
+      const s = window.__talon.state;
+      if (s.phase !== 'run' || s.lockedId === null) return null;
+      const t = window.__talon.info().enemies.find((e) => e.id === s.lockedId);
+      return t ? { id: t.id, type: t.type } : null;
+    });
+    if (!lock) { await page.evaluate(() => { if (window.__talon.state.paused) window.__talon.resume(); }); continue; }
+    ammoBeforeE = await page.evaluate(() => window.__talon.state.ammo);
+    await page.evaluate(() => window.__talon.resume());
+    await page.keyboard.press('e');
+    try {
+      await page.waitForFunction((a) => window.__talon.state.ammo < a, ammoBeforeE, { timeout: 5000 });
+      ammoAfterE = await page.evaluate(() => window.__talon.state.ammo);
+    } catch { /* lock died before E landed; re-lock and retry */ }
+  }
+  if (ammoAfterE === null) fail('manual E did not fire a missile on a gold lock after 3 attempts');
+  console.log(`render-check: manual E fires a missile on a gold lock — ammo ${ammoBeforeE} -> ${ammoAfterE}`);
 
   // Autopilot (decision bot through the public hooks) clears sortie 1.
   // The completion is observed on the player-facing complete screen:
   // onRunEnd() swaps the run for the menu demo in the same frame the
   // run ends, so state.done is only ever true transiently and the
-  // screen is the durable signal.
+  // screen is the durable signal. Restart fresh with the autopilot
+  // ON: the missile tests above switch it off, and a pilotless ship
+  // cannot clear (run 1's clear only worked because the manual-E
+  // missile happened to finish the carrier and the final stretch is
+  // straight — luck, not a test).
+  await page.evaluate(() => { window.__talon.restart(); window.__talon.setSpeed(4); window.__talon.autopilot(true); });
   await page.waitForFunction(() => !document.querySelector('#complete').classList.contains('hidden'), null, { timeout: 420000 });
   const completeScore = await page.textContent('#complete-score');
   console.log(`render-check: autopilot cleared sortie 1 (${completeScore.trim()}) — complete screen shown`);

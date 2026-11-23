@@ -20,7 +20,7 @@ function check(name, cond) {
   else { failed++; failures.push(name); console.error('FAIL:', name); }
 }
 
-check('physics version is 0.1.1', VERSION === '0.1.1');
+check('physics version is 0.1.2', VERSION === '0.1.2');
 check('3 sorties defined', SORTIES.length === 3);
 check('sortie ids are 1..3 in order', SORTIES.every((s, i) => s.id === i + 1));
 check('every sortie has a name and a hint', SORTIES.every((s) => s.name && s.hint));
@@ -32,6 +32,8 @@ check('sortieById finds sortie 2', sortieById(2) && sortieById(2).name === 'Embe
 check('sortieById returns null for unknown id', sortieById(99) === null);
 check('sortie 1 teaches: first spawns are drones only', SORTIES[0].spawns.filter((s) => s.at <= 200).every((s) => s.type === 'drone'));
 check('sortie 1 first turret is telegraphed (z >= 200)', SORTIES[0].spawns.filter((s) => s.type === 'turret')[0].at >= 200);
+check('sortie 1 opening is a straight teaching runway to z=200', segmentAt(SORTIES[0], 100).cx === 0 && segmentAt(SORTIES[0], 200).cx === 0);
+check('sortie 1 first bend is gentle (|cx| <= 4)', Math.abs(segmentAt(SORTIES[0], 300).cx) <= 4);
 check('every sortie ends with a carrier', SORTIES.every((s) => s.spawns.some((g) => g.type === 'carrier' && g.at >= s.length - 200)));
 check('every sortie has interceptors and turrets', SORTIES.every((s) => s.spawns.some((g) => g.type === 'interceptor') && s.spawns.some((g) => g.type === 'turret')));
 
@@ -189,6 +191,83 @@ check('sortieLost is a large event', FEEDBACK.sortieLost.tier === 'large');
   check('carrier takes 30% gun damage', run4.enemies[0].hp === 260 - GUN_DAMAGE * 0.3);
 }
 
+// --- lock memory (v0.1.2): E must still fire in the beat after the
+// locked target vanishes ---
+// The live playtest's "E never fires" was this race: the player holds
+// fire while locking, the locked drone dies to guns (or rams), and the
+// E press lands after the lock cleared. A full lock whose target just
+// vanished is remembered for 0.75s: E fires at the target now being
+// re-locked. The ram path matters as much as the gunfire path — a ram
+// used to leave lockedId dangling at a removed enemy, so the reticle
+// stayed gold with "LOCK" showing while E silently did nothing.
+{
+  function deathRun(killBy) {
+    const run = startRun(SORTIES[0]);
+    run.spawnQueue = [];
+    run.enemies.push({ id: 200, type: 'drone', x: run.x, y: run.y, z: run.z + 45, hp: 20, maxHp: 20, baseX: run.x, baseY: run.y, phase: 0, fireCd: 99, burstLeft: 0, burstCd: 0 });
+    run.enemies.push({ id: 201, type: 'drone', x: run.x, y: run.y, z: run.z + 49, hp: 20, maxHp: 20, baseX: run.x, baseY: run.y, phase: 0, fireCd: 99, burstLeft: 0, burstCd: 0 });
+    for (let i = 0; i < Math.ceil((LOCK_TIME + 0.2) / DT); i++) { setInput(run, {}); stepRun(run, DT); }
+    if (run.lockedId !== 200) return { run, ok: false, why: 'no lock' };
+    if (killBy === 'guns') {
+      let steps = 0;
+      while (run.enemies.some((e) => e.id === 200) && steps < 60 * 2) { setInput(run, { fire: true }); stepRun(run, DT); steps++; }
+      if (run.enemies.some((e) => e.id === 200)) return { run, ok: false, why: 'drone survived guns' };
+    } else {
+      // No fire: the drone closes in and rams.
+      let steps = 0;
+      while (run.enemies.some((e) => e.id === 200) && steps < 60 * 3) { setInput(run, {}); stepRun(run, DT); steps++; }
+      if (run.enemies.some((e) => e.id === 200)) return { run, ok: false, why: 'drone never rammed' };
+    }
+    return { run, ok: true };
+  }
+  {
+    const { run, ok, why } = deathRun('guns');
+    check('lock-memory setup (guns): first drone locked then died to guns', ok);
+    if (ok) {
+      check('lock-memory setup (guns): memory is armed, lock cleared, re-lock target live', run.lockMemoryT > 0 && run.lockedId === null && run.enemies.some((e) => e.id === 201));
+      const ammo = run.ammo;
+      setInput(run, { missile: true });
+      stepRun(run, DT);
+      check('lock memory (guns): E fires at the re-lock target after the locked target died', run.missilesFired === 1 && run.ammo === ammo - 1 && run.missiles[0] && run.missiles[0].targetId === 201);
+    }
+  }
+  {
+    const { run, ok, why } = deathRun('ram');
+    check('lock-memory setup (ram): first drone locked then rammed', ok);
+    if (ok) {
+      check('lock-memory setup (ram): memory is armed and no lock dangles', run.lockMemoryT > 0 && run.lockedId === null && run.enemies.some((e) => e.id === 201));
+      const ammo = run.ammo;
+      setInput(run, { missile: true });
+      stepRun(run, DT);
+      check('lock memory (ram): E fires at the re-lock target after the locked target rammed', run.missilesFired === 1 && run.ammo === ammo - 1 && run.missiles[0] && run.missiles[0].targetId === 201);
+    }
+  }
+  {
+    // No memory, no fire: a missile still needs a lock.
+    const { run, ok } = deathRun('guns');
+    check('lock-memory setup (no-memory): first drone locked then died', ok);
+    if (ok) {
+      run.lockMemoryT = 0;
+      const ammo = run.ammo;
+      setInput(run, { missile: true });
+      stepRun(run, DT);
+      check('no lock memory: E does nothing without a lock', run.missilesFired === 0 && run.ammo === ammo);
+    }
+  }
+  {
+    // Re-lock credit below 0.3s: too early to fire.
+    const { run, ok } = deathRun('guns');
+    check('lock-memory setup (low-credit): first drone locked then died', ok);
+    if (ok) {
+      run.lockT = 0.2;
+      const ammo = run.ammo;
+      setInput(run, { missile: true });
+      stepRun(run, DT);
+      check('lock memory needs 0.3s re-lock credit before E fires', run.missilesFired === 0 && run.ammo === ammo);
+    }
+  }
+}
+
 // --- spawn protection (v0.1.1): no damage in the first 4 seconds ---
 {
   const run = startRun(SORTIES[0]);
@@ -310,6 +389,10 @@ check('perf guard does not step down on a brief dip', perfGuardStep(0, 30, 1000)
   const rec = recordBest(back, 1, 2000, 10, false);
   check('recordBest keeps the max score', rec.score === 2000 && rec.cleared === true);
   check('recordBest records a fresh clear', recordBest(back, 2, 500, 5, true).cleared === true);
+  // v0.1.2: a loss records the best (uncleared) but does not unlock.
+  const lost = recordBest(defaultSave(), 1, 1000, 10, false);
+  check('recordBest on a loss saves the score uncleared', lost.score === 1000 && lost.cleared === false);
+  check('an uncleared best does not unlock the next sortie', !isSortieUnlocked({ 1: lost }, 2));
 }
 
 if (failed) { console.error(`smoke: ${failed} failure(s) out of ${passed + failed}`); process.exit(1); }
