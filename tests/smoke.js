@@ -20,15 +20,16 @@ function check(name, cond) {
   else { failed++; failures.push(name); console.error('FAIL:', name); }
 }
 
-check('physics version is 0.1.5', VERSION === '0.1.5');
-check('3 sorties defined', SORTIES.length === 3);
-check('sortie ids are 1..3 in order', SORTIES.every((s, i) => s.id === i + 1));
+check('physics version is 0.2.0', VERSION === '0.2.0');
+check('8 sorties defined', SORTIES.length === 8);
+check('sortie ids are 1..8 in order', SORTIES.every((s, i) => s.id === i + 1));
 check('every sortie has a name and a hint', SORTIES.every((s) => s.name && s.hint));
-check('every sortie has a distinct theme ring', new Set(SORTIES.map((s) => s.theme.ring)).size === 3);
-check('every sortie has a distinct theme disc', new Set(SORTIES.map((s) => s.theme.disc)).size === 3);
+check('every sortie has a distinct theme ring', new Set(SORTIES.map((s) => s.theme.ring)).size === 8);
+check('every sortie has a distinct theme disc', new Set(SORTIES.map((s) => s.theme.disc)).size === 8);
 check('every sortie is dense (25+ enemies)', SORTIES.every((s) => totalEnemiesInSortie(s) >= 25));
-check('threat grows with difficulty', sortieThreat(SORTIES[1]) > sortieThreat(SORTIES[0]) && sortieThreat(SORTIES[2]) > sortieThreat(SORTIES[1]));
+check('threat grows with difficulty (no cliff, no dip)', SORTIES.every((s, i) => i === 0 || sortieThreat(s) > sortieThreat(SORTIES[i - 1])));
 check('sortieById finds sortie 2', sortieById(2) && sortieById(2).name === 'Ember Strait');
+check('sortieById finds sortie 8', sortieById(8) && sortieById(8).name === 'Void Crown');
 check('sortieById returns null for unknown id', sortieById(99) === null);
 check('sortie 1 teaches: first spawns are drones only', SORTIES[0].spawns.filter((s) => s.at <= 200).every((s) => s.type === 'drone'));
 check('sortie 1 first turret is telegraphed (z >= 200)', SORTIES[0].spawns.filter((s) => s.type === 'turret')[0].at >= 200);
@@ -351,6 +352,8 @@ check('sortie 1 is always unlocked', isSortieUnlocked({}, 1));
 check('sortie 2 locks until sortie 1 is cleared', !isSortieUnlocked({}, 2) && !isSortieUnlocked({ 1: { score: 1, kills: 1, cleared: false } }, 2));
 check('sortie 2 unlocks when sortie 1 is cleared', isSortieUnlocked({ 1: { score: 1, kills: 1, cleared: true } }, 2));
 check('sortie 3 unlocks when sortie 2 is cleared', isSortieUnlocked({ 1: { score: 1, cleared: true }, 2: { score: 1, cleared: true } }, 3));
+check('sortie 8 locks until sortie 7 is cleared', !isSortieUnlocked({ 7: { score: 1, cleared: false } }, 8));
+check('sortie 8 unlocks when sortie 7 is cleared', isSortieUnlocked({ 7: { score: 1, cleared: true } }, 8));
 
 // --- aim direction tilts with steering (aiming IS steering) ---
 {

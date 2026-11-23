@@ -1,11 +1,11 @@
-// Neon Talon v0.1.5 — headless browser render check.
+// Neon Talon v0.2.0 — headless browser render check.
 // Serves the game dir over local HTTP, loads it in a headless browser, and
 // asserts the M1 core, by hook and by eye:
 //   - the menu renders over a LIVE 3D scene (the attract demo actually
 //     flies — the demo ship moves and enemies appear), with no
 //     version/engine text anywhere the player can see, one clear primary
-//     Play action, and 3 sortie cards
-//   - gates on a fresh save: sorties 2-3 locked; the ?sortie= seed path
+//     Play action, and 8 sortie cards
+//   - gates on a fresh save: sorties 2-8 locked; the ?sortie= seed path
 //     reaches every sortie (the Apex lesson)
 //   - Play starts a run: the HUD shows, and steering left with a REAL
 //     held key moves the ship left ON SCREEN (screen space asserted —
@@ -137,8 +137,8 @@ try {
   }
 
   const version = await page.evaluate(() => window.__talon.version);
-  if (version !== '0.1.5') fail(`expected version 0.1.5, got ${version}`);
-  console.log('render-check: game module initialised, version 0.1.5');
+  if (version !== '0.2.0') fail(`expected version 0.2.0, got ${version}`);
+  console.log('render-check: game module initialised, version 0.2.0');
 
   // WebGL context exists and the canvas is on screen.
   const gl = await page.evaluate(() => {
@@ -150,31 +150,32 @@ try {
   if (!gl) fail('no WebGL context on the game canvas');
   console.log(`render-check: WebGL context live (${gl.width}x${gl.height} canvas)`);
 
-  // The menu: title, one primary Play, 3 sortie cards, NO version/engine
+  // The menu: title, one primary Play, 8 sortie cards, NO version/engine
   // text anywhere the player can see.
   const menuText = await page.textContent('#menu');
   if (!menuText.includes('NEON TALON')) fail('menu title missing');
-  if (menuText.includes('v0.1.0') || menuText.includes('Three.js') || menuText.includes('0.160.0')) {
+  if (menuText.includes('v0.1.0') || menuText.includes('v0.2.0') || menuText.includes('Three.js') || menuText.includes('0.160.0')) {
     fail('menu shows version/engine text — it must live in the README only');
   }
   const playClass = await page.getAttribute('#btn-play', 'class');
   if (!playClass || !playClass.includes('primary')) fail('Play is not the primary action');
   const sortieCards = await page.locator('#sortie-select .map-card').count();
-  if (sortieCards !== 3) fail(`expected 3 sortie cards, got ${sortieCards}`);
+  if (sortieCards !== 8) fail(`expected 8 sortie cards, got ${sortieCards}`);
   const sorties = await page.evaluate(() => window.__talon.sorties());
-  if (sorties.length !== 3 || sorties[0].name !== 'First Flight' || sorties[1].name !== 'Ember Strait' || sorties[2].name !== "Widow's Spine") {
+  const expectedNames = ['First Flight', 'Ember Strait', "Widow's Spine", 'Crimson Hollow', 'Verdant Rift', 'Azure Deep', 'Golden Maw', 'Void Crown'];
+  if (sorties.length !== 8 || !expectedNames.every((n, i) => sorties[i].name === n)) {
     fail(`sortie list wrong: ${JSON.stringify(sorties.map((s) => s.name))}`);
   }
-  console.log('render-check: menu renders — live 3D behind it, no version text, Play primary, 3 sorties');
+  console.log('render-check: menu renders — live 3D behind it, no version text, Play primary, 8 sorties');
 
-  // Gates on a fresh save: sorties 2-3 locked, sortie 1 open.
+  // Gates on a fresh save: sorties 2-8 locked, sortie 1 open.
   const unlocks0 = await page.evaluate(() => window.__talon.unlocks());
-  if (unlocks0.sorties[1] !== true || unlocks0.sorties[2] !== false || unlocks0.sorties[3] !== false) {
+  if (unlocks0.sorties[1] !== true || [2, 3, 4, 5, 6, 7, 8].some((id) => unlocks0.sorties[id] !== false)) {
     fail(`fresh save should unlock only sortie 1: ${JSON.stringify(unlocks0.sorties)}`);
   }
   const lockedCards = await page.locator('#sortie-select .map-card.locked').count();
-  if (lockedCards !== 2) fail(`expected 2 locked sortie cards on a fresh save, got ${lockedCards}`);
-  console.log('render-check: gates closed on a fresh save — sorties 2-3 locked (2 locked cards)');
+  if (lockedCards !== 7) fail(`expected 7 locked sortie cards on a fresh save, got ${lockedCards}`);
+  console.log('render-check: gates closed on a fresh save — sorties 2-8 locked (7 locked cards)');
 
   // The attract demo actually flies behind the menu: the demo ship
   // moves forward and enemies appear ahead of it.
@@ -417,19 +418,19 @@ try {
   await page.waitForFunction(() => document.querySelector('#pause').classList.contains('hidden'), null, { timeout: 5000 });
   console.log('render-check: P pauses (Resume focused) and resumes');
 
-  // The ?sortie= seed path reaches sortie 3 past the locks (Apex lesson).
-  await page.goto(`http://127.0.0.1:${port}/?sortie=3`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  // The ?sortie= seed path reaches sortie 8 past the locks (Apex lesson).
+  await page.goto(`http://127.0.0.1:${port}/?sortie=8`, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForFunction(() => window.__talon, null, { timeout: 30000 });
   const unlocksSeed = await page.evaluate(() => window.__talon.unlocks());
-  if (unlocksSeed.sorties[3] !== true) fail(`?sortie=3 should unlock sortie 3 for the session: ${JSON.stringify(unlocksSeed.sorties)}`);
-  await page.evaluate(() => window.__talon.start(3));
-  await page.waitForFunction(() => window.__talon.state.phase === 'run' && window.__talon.state.sortieId === 3, null, { timeout: 5000 });
+  if (unlocksSeed.sorties[8] !== true) fail(`?sortie=8 should unlock sortie 8 for the session: ${JSON.stringify(unlocksSeed.sorties)}`);
+  await page.evaluate(() => window.__talon.start(8));
+  await page.waitForFunction(() => window.__talon.state.phase === 'run' && window.__talon.state.sortieId === 8, null, { timeout: 5000 });
   await page.evaluate(() => { window.__talon.setSpeed(4); window.__talon.autopilot(true); });
   await page.waitForFunction(() => {
     const i = window.__talon.info();
     return i.enemies.length > 0;
   }, null, { timeout: 120000 });
-  console.log("render-check: ?sortie=3 reaches Widow's Spine past the locks — autopilot is playing it");
+  console.log("render-check: ?sortie=8 reaches Void Crown past the locks — autopilot is playing it");
 
   // Accessibility: text size + high contrast apply and persist.
   await page.evaluate(() => window.__talon.quitToMenu());
