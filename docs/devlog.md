@@ -342,3 +342,73 @@ score 4286 hull 94, S2 27.6s score 4095 hull 84, S3 33.9s score
 - Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
   inspected by eye — no clipping or overlap. Portrait still leaves
   a large empty sky band above the canyon (carried known issue).
+
+## v0.1.5 — re-playtest NO-GO, the carrier wall (2026-11-23, 15:30 run continued)
+
+Live v0.1.4 re-playtest (17:36–17:48 +07): NO-GO, but steering
+is FIXED — clear PASS. Cursor at exact screen centre: level
+flight, hull 100, 3%→40%, 9 kills, no wall contact; cursor on the
+tunnel mouth (60px above centre) also level; left/right/up/down
+probes steer correctly and return-to-centre levels off. The
+blocker is now the endgame: sortie 1 was not cleared in 9
+attempts (best 88%, 18 kills, score 2000). The interceptor zone
+(50–88%) and the carrier at 88% are overtuned, and the carrier
+gives no health feedback: parked at the carrier, hull fell
+100→9 in ~7s of holding lock; missiles were fired on a gold lock
+but the player never saw whether the carrier was dying. Death
+screen PASS (no toast pill on any settled death screen; R and
+Enter restart). Readability PASS (orange fire bigger and distinct
+from pink drones). Regressions PASS (missiles E + right-click,
+bests save — menu Best 2000). Sortie 2 sampled via ?sortie=2
+(loads, plays, 27% in a sample). What would flip it: lower
+interceptor/turret damage in 50–88%, grace on carrier arrival,
+and a visible carrier health bar.
+
+Fixes (v0.1.5), each verified against the code before choosing:
+- Carrier health bar: a gold CARRIER bar appears top-centre
+  whenever a carrier is ahead within firing range (dz 0–90),
+  fill = hp/maxHp, driven by updateHUD. The v0.1.4 playtest's
+  missing feedback, fixed as feedback, not as damage.
+- Carrier arrival grace: a carrier's fan is silent for 3s after
+  it first comes within firing range (dz < 90) — a telegraphed
+  arrival. The player must fly straight at the carrier to build
+  the first lock, and the fan is aimed at the predicted position,
+  so without a grace the approach punishes exactly the behaviour
+  the fight asks for.
+- Escorts hold distance while blocked: interceptors stop closing
+  (e.z -= 5/s skipped) while the ship is pressed against a
+  carrier — they strafe and shoot but cannot close through their
+  own carrier to ram the parked player. The block stays a missile
+  problem: the grind (5/s) plus the escorts' shots still kill a
+  guns-only bot long before its guns (30% armour) can finish
+  260 HP.
+- Deliberately NOT changed: interceptor/turret damage in 50–88%
+  (the "standing idle shreds hull" evidence is a passive player
+  being punished, which is by design — the decision bot clears
+  with hull 94); the block grind (5/s is the backstop that keeps
+  guns-only honest); interceptor positions (spawn streaming means
+  moving the 640 pair to 680 would not keep them out of the
+  fight — they spawn at z=560 and close at 5/s).
+
+Tests (final tree): node --check PASS (game, physics, all tests);
+smoke 162 checks PASS; bot PASS — decision clears all 3 (S1 23.8s
+score 4286 hull 94 — identical to v0.1.4, the grace never matters
+to a bot that kills the carrier in ~3s; S2 28.5s score 3872 hull
+72, S3 34.5s score 4804 hull 60), straight-line loses all 3 (S1
+dies at z=621, unchanged), guns-only loses all 3.
+- render-check: run 1 FAILED only on the new carrier-bar
+  assertion — a test bug, not a game bug: the HUD updates on a
+  100ms tick and the check read the bar the same frame the carrier
+  entered range. Fix: pause first, wait 300ms for the tick, then
+  assert (updateHUD runs while paused). Run 2: PASS, zero console
+  errors. Carrier health bar shows while a carrier is in range
+  (fill 100%); hook missile 8→7, manual E 7→6, autopilot clears
+  sortie 1 (4286), Next Sortie unlocks sortie 2, ?sortie=3 reaches
+  Widow's Spine, accessibility persists, FPS guard steps the
+  pixel ratio, R restarts from the death screen with the scrape
+  toast live. A carrier-bar screenshot is saved by the check for
+  the by-eye review (bar + CARRIER label top-centre, clear of the
+  toast and the pause panel).
+- Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
+  inspected by eye — no clipping or overlap. Portrait still leaves
+  a large empty sky band above the canyon (carried known issue).
