@@ -500,3 +500,78 @@ removed anywhere:
 - M2 is NOT done until the re-playtest says GO on sorties 4–8 — the
   re-playtest is delegated after the v0.2.1 push and its verdict
   decides M2.
+
+## v0.2.2 — M2 fix round #2 (2026-11-23, 21:30 run)
+
+The 19:44 re-playtest on v0.2.1 said NO-GO as a set (16 runs): reach
+improved (S5 35%→46%) but arrival hull did not — carriers were
+reached with hull 1–4 and died parked, in all three cases. Spacing
+moved the death further along; it did not make the sorties
+survivable. The binding constraint is cumulative attrition plus the
+carrier block as a DPS race when arriving depleted, so fix round #2
+uses bigger levers than spacing — no enemy removed anywhere:
+
+- Carrier kill restores hull (physics.js: CARRIER_KILL_HULL = 25,
+  capped at 100; new `carrierDown` event, game.js toasts
+  "CARRIER DOWN — hull +25" with a gold "+25 HULL" pop). A carrier
+  is a checkpoint now, not just a gate: a good carrier fight
+  recovers the run. It cannot rescue the anti-slop bots — neither
+  the straight-line bot nor the guns-only bot ever kills a carrier.
+- Carrier fan grace 3s → 4.5s. A lock is 0.8s and each re-lock 0.6s,
+  so three missiles land inside ~2.5s for a clean lock — but a human
+  who wobbles once needs a second lock-build, and at 3s the first
+  fan arrived mid-re-lock and ended runs that had arrived at the
+  carrier with single-digit hull. The fan still punishes anyone who
+  lingers after the grace.
+- Wall scrape 14 → 10 DPS. Scrape was the dominant death in the S8
+  playtest — 14 DPS kills in ~7s of contact, and a tap-only player
+  (or a first-time human) spends that long on the rock in the narrow
+  canyons. 10 DPS still taxes bad flying but stops the wall being
+  the run-ender on every bend.
+- S6 choke split (verified, not guessed): the human playtest died at
+  34% (z≈357) in all three attempts and the straight bot loses at
+  z=360 too — the drone x5 @340 + interceptor x3 @380 cluster.
+  Now drone 3 @340 + drone 2 @365, interceptors @385, so the threats
+  arrive one at a time.
+- Toast-on-menu glitch fixed (game.js): quitToMenu() now clears the
+  toast the same way onRunEnd() does, and toast() suppresses itself
+  while the phase is 'menu' — a toast fired in a run can no longer
+  survive a quit to the menu from pause. The render check's R-restart
+  step confirms the death screen shows no stale toast.
+- Missile-vs-carrier-bar verified at last (render-check): a new step
+  waits for a missileHit on a carrier in the durable feedback log
+  together with the DOM carrier-bar fill falling ≥20 points (one
+  missile is 90/260 ≈ 35%) or the carrier dying. The two live
+  playtests never saw a missile land on a carrier while alive; the
+  headless probe had shown the missiles work, and now the browser
+  check proves the bar drops.
+
+### Test totals (v0.2.2, local tree)
+
+- node --check PASS (game, physics, all tests)
+- smoke: 211 checks PASS (new: carrier-kill restore + cap,
+  carrierDown event, scrape 10/s, S6 split)
+- bot: decision clears all 8 (hulls 100/100/99/100/100/90/100/92),
+  straight-line loses all 8 (z 621/364/312/461/461/368/347/337),
+  guns-only loses all 8. The hull restore tops the bot up — it was
+  already clearing — and the scrape cut lets the straight bot fly
+  further (S2 315 → 364) without saving it: it still dies at the
+  carrier blocks it cannot kill.
+- render-check: PASS, zero console errors — including the new
+  missile-drops-the-carrier-bar step
+- Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
+  inspected by eye — no clipping or overlap; "LOCKING — DRONE"
+  reads cleanly at all three; portrait still leaves a large empty
+  sky band above the canyon (carried known issue).
+
+### Known issues (v0.2.2)
+
+- M2 is NOT done until the re-playtest says GO on sorties 4–8 — the
+  re-playtest is delegated after the v0.2.2 push and its verdict
+  decides M2 (lands in the finale run).
+- Watch in the playtest: the levers are deliberately big — if S4–S8
+  now read as easy or the carriers feel like free hull, the restore
+  (25) is the first knob to turn down, not the scrape or the grace.
+- S5 menu hint still says "interceptors come in threes" (packs are
+  count-3, just separated in z — copy describes composition, not
+  simultaneity); polish tweak, not a fix-round item.
