@@ -575,3 +575,60 @@ uses bigger levers than spacing — no enemy removed anywhere:
 - S5 menu hint still says "interceptors come in threes" (packs are
   count-3, just separated in z — copy describes composition, not
   simultaneity); polish tweak, not a fix-round item.
+
+## v0.2.3 — sr-status fix (2026-11-23, 21:30 run)
+
+The v0.2.2 re-playtest (12 runs, 21:47–22:01 +07) said NO-GO as a
+set — but no carrier was reached in any sortie, so none of the five
+v0.2.2 carrier fixes could be verified and none of the sorties can
+be judged fun on this evidence. The deaths (24–43%, median ~30%)
+match the straight-line bot's loss points (z=257–461, i.e. 27–48%
+of the sortie lengths): a tap-only player is effectively a straight
+bot with occasional nudges, and the straight bot must lose — so
+this playtest method has hit its ceiling. M2's fun verdict needs a
+human held-key playtest; no further difficulty cut is justified on
+this evidence (cutting the opening until tap-only input survives
+would let the straight bot clear, breaking the anti-slop gate).
+
+Two playtest claims were checked against the code before being
+repeated:
+- "Dense pink rock field dead on the centre line": REFUTED. The
+  floating rocks (game.js) sit hw+2 to hw+6 OUTSIDE the canyon
+  walls, unreachable decoration, and are dark violet, not pink.
+  What is pink and on the centre line is the drones (#f472b6, dx 0,
+  drifting toward the player's lane) — the designed filter: flying
+  straight into them dies, by design.
+- "Last lock toast's text still in the DOM after quitting to the
+  menu": CONFIRMED. toast() writes every message into #sr-status
+  (the screen-reader live region) and nothing ever cleared it.
+  Fixed: onRunEnd(), quitToMenu() and the toast hide timer now
+  clear #sr-status too. New render-check step asserts sr-status
+  is empty after quitToMenu.
+- Not fixed (timing artifact, not a defect): the lock toast once
+  said "Lock on drone" while the reticle read "LOCK — INTERCEPTOR"
+  — the toast is a snapshot of the lock that was acquired; the
+  reticle is live, and the target changed between the two. The
+  death screen has no cause line in code; the "cause line" the
+  playtest reported was most likely the scrape toast seen mid-run.
+
+### Test totals (v0.2.3, local tree)
+
+- node --check PASS (game, physics, all tests)
+- smoke: 211 checks PASS
+- bot: decision clears all 8, straight-line loses all 8, guns-only
+  loses all 8 (unchanged from v0.2.2 — no physics change)
+- render-check: PASS on re-run, zero console errors — including the
+  new sr-status step. First run hit a one-off 120s timeout at the
+  ?sortie=8 step (line 450), the same timing flake the 19:30 run
+  saw at the same step; the re-run passed it in normal time.
+  Logged as a timing flake, not a defect.
+- Size sweep: not re-run — no visual change (the fix only clears
+  hidden screen-reader text); v0.2.2 sweep stands.
+
+### Known issues (v0.2.3)
+
+- M2 is NOT done: no real-browser FUN playtest GO on sorties 4–8.
+  The tap-only browser method cannot steer this game (banked,
+  turn-based steering needs held keys); a human held-key playtest
+  is the remaining gate, and it is out of this sprint's tooling.
+  The finale reports this honestly.
