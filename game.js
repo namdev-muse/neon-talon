@@ -1,4 +1,4 @@
-// Neon Talon v0.1.2 — 3D neon aerial dogfighter (Three.js 0.160.0).
+// Neon Talon v0.1.3 — 3D neon aerial dogfighter (Three.js 0.160.0).
 // Fly a neon interceptor through canyon runs; guns and lock-on
 // missiles take down drones, interceptors and turrets; boost builds
 // heat, and heat management is the skill. Carriers fill the canyon
@@ -222,16 +222,16 @@ let boostHeld = false;
 
 // Input state (keyboard + mouse + touch, merged every frame).
 const keys = new Set();
-const mouseSteer = { active: false, x: 0, y: 0, refX: null, refY: null };
-// Last pointer position anywhere on the page, so a run can centre
-// mouse steering on where the mouse actually is at launch (v0.1.1:
-// after clicking Play the cursor sat off-centre and the ship steered
-// into a wall before the player touched anything).
-const lastPointer = { x: null, y: null };
-window.addEventListener('pointermove', (e) => {
-  lastPointer.x = e.clientX;
-  lastPointer.y = e.clientY;
-}, { passive: true });
+// Mouse steering (v0.1.3): chase-the-cursor — the ship steers toward
+// the cursor's position relative to the ship on screen, so the ship
+// flies where the player points and levels once it is under the
+// cursor. This replaces the v0.1.1 spawn-relative model: the live
+// playtest showed players naturally point at the tunnel mouth, and
+// relative steering turned that into an uncontrolled climb out of the
+// canyon. The spawn trap the relative model fixed is still fixed — at
+// launch the cursor sits over the Play button, roughly under the ship,
+// so steering starts near zero.
+const mouseSteer = { active: false, x: 0, y: 0 };
 let fireHeld = false, boostKeyHeld = false;
 let touchSteer = null; // {x, y} drag vector or null
 let touchFire = false, touchBoost = false;
@@ -284,7 +284,10 @@ const MATS = {
   turret: new THREE.MeshStandardMaterial({ color: 0xe879f9, roughness: 0.4, metalness: 0.5, emissive: 0xa21caf, emissiveIntensity: 1.0 }),
   carrier: new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.35, metalness: 0.55, emissive: 0xb45309, emissiveIntensity: 0.9 }),
   carrierTrim: new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3, metalness: 0.5, emissive: 0xd97706, emissiveIntensity: 1.2 }),
-  shot: new THREE.MeshBasicMaterial({ color: 0xf472b6 }),
+  // Enemy shots are hot orange (v0.1.3): they were the same pink as
+  // the drones (0xf472b6), so at distance a player could not tell
+  // enemy fire from enemies. Drones stay pink; fire glows orange.
+  shot: new THREE.MeshBasicMaterial({ color: 0xfb923c }),
   missile: new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.3, metalness: 0.5, emissive: 0xf59e0b, emissiveIntensity: 1.2 }),
 };
 const GEOS = {
@@ -901,12 +904,11 @@ function startSortie(id) {
   buildCanyon(s);
   clearEnemyMeshes();
   feedbackLog = [];
-  // Centre mouse steering on the cursor's launch position (v0.1.1):
-  // wherever the mouse rests after clicking Play is neutral.
+  // Mouse steering starts neutral (v0.1.3 chase-the-cursor: the ship
+  // steers toward the cursor relative to itself, so it flies level
+  // until the player actually moves the mouse).
   mouseSteer.active = false;
   mouseSteer.x = 0; mouseSteer.y = 0;
-  mouseSteer.refX = lastPointer.x ?? window.innerWidth / 2;
-  mouseSteer.refY = lastPointer.y ?? window.innerHeight / 2;
   lastWallToast = 0;
   phase = 'run';
   screenStack = [];
@@ -926,6 +928,16 @@ function startSortie(id) {
 }
 function onRunEnd() {
   if (!run || !run.done) return;
+  // v0.1.3: a toast that is still showing when the run ends (a scrape
+  // toast on the killing scrape, an overheat toast on a fatal ram) must
+  // not carry onto the death screen — hide it and clear its text here,
+  // not only when its 2.4s timer fires. The v0.1.2 fix cleared the
+  // text on hide, but the pill stayed visible on the death screen
+  // until the timer fired.
+  clearTimeout(toast._t);
+  const toastEl = $('hud-toast');
+  toastEl.classList.remove('show');
+  toastEl.textContent = '';
   musicLeadOn = false;
   $('reticle').classList.add('hidden');
   $('touch-controls').classList.add('hidden');
@@ -1023,14 +1035,17 @@ function queueMissile() {
 if (renderer) {
   const canvas = renderer.domElement;
   canvas.addEventListener('pointermove', (e) => {
-    if (phase !== 'run' || paused) return;
-    // Spawn-relative steering: the mouse position at launch is neutral,
-    // so the ship flies straight until the player actually moves the
-    // mouse. Steering is relative to that launch position, not to the
-    // screen centre.
+    if (phase !== 'run' || paused || !run) return;
+    // Chase-the-cursor steering (v0.1.3): the ship steers toward the
+    // cursor's position relative to the ship on screen. Put the cursor
+    // where you want to fly; once the ship is under the cursor it
+    // flies level. Steering eases as the ship approaches the cursor,
+    // so pointing at the tunnel mouth climbs gently and then levels
+    // instead of climbing without limit.
+    const s = projectToScreen(run.x, run.y, 0);
     mouseSteer.active = true;
-    mouseSteer.x = clamp((e.clientX - mouseSteer.refX) / (window.innerWidth * 0.35), -1, 1);
-    mouseSteer.y = clamp(-((e.clientY - mouseSteer.refY) / (window.innerHeight * 0.35)), -1, 1);
+    mouseSteer.x = clamp((e.clientX - s.x) / (window.innerWidth * 0.35), -1, 1);
+    mouseSteer.y = clamp(-((e.clientY - s.y) / (window.innerHeight * 0.35)), -1, 1);
   });
   canvas.addEventListener('pointerdown', (e) => {
     if (phase !== 'run' || paused) return;
@@ -1091,9 +1106,24 @@ document.addEventListener('keydown', (e) => {
   keys.add(e.key.length === 1 ? e.key : e.key);
   if (e.key === 'Shift') boostKeyHeld = true;
   if (phase === 'menu') {
+    // v0.1.3: R and Enter must work from the death and complete
+    // screens, not only from the menu — the live playtest found R did
+    // nothing on the death screen and Enter only worked when Fly Again
+    // happened to be focused. Holding a key must not re-fire (a held
+    // Enter used to restart the run repeatedly).
+    if (e.repeat) return;
     if (e.key === 'Enter' && topScreen() === 'menu') {
       ensureAudio();
       startSortie(selectedSortieId);
+    } else if (e.key === 'Enter' && topScreen() === 'sortielost') {
+      ensureAudio();
+      startSortie(sortie.id);
+    } else if (e.key === 'Enter' && topScreen() === 'complete') {
+      ensureAudio();
+      startSortie(sortie.id < SORTIES.length ? sortie.id + 1 : sortie.id);
+    } else if ((e.key === 'r' || e.key === 'R') && (topScreen() === 'sortielost' || topScreen() === 'complete')) {
+      ensureAudio();
+      startSortie(sortie.id);
     }
     return;
   }
@@ -1355,7 +1385,6 @@ window.__talon = {
       projectiles: r.projectiles.map((p) => ({ x: p.x, y: p.y, z: p.z, screen: projectToScreen(p.x, p.y, -(p.z - r.z)) })),
       missiles: r.missiles.map((m) => ({ x: m.x, y: m.y, z: m.z, targetId: m.targetId })),
       input: { ...r.input },
-      mouseRef: { x: mouseSteer.refX, y: mouseSteer.refY },
       trauma, timeScale, fov: camera.fov, fovPulse,
       shakeAmp: trauma * trauma * shakeStrength,
       perf: { fps: Math.round(fpsEma), pixelRatio: renderer ? renderer.getPixelRatio() : null, level: perfLevel },
