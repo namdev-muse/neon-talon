@@ -4,7 +4,7 @@ import {
   sortieThreat, parTime, isSortieUnlocked,
   DT, HULL_MAX, HEAT_MAX, OVERHEAT_CLEAR, BASE_SPEED, BOOST_SPEED,
   GUN_RATE, GUN_DAMAGE, GUN_RANGE, LOCK_TIME, LOCK_RANGE,
-  MISSILE_DAMAGE, MISSILE_AMMO,
+  MISSILE_DAMAGE, MISSILE_AMMO, CARRIER_KILL_HULL, WALL_SCRAPE_DPS,
   ENEMY_DEFS, ENEMY_ORDER, FEEDBACK, FEEDBACK_TIERS, FEEDBACK_LAYERS,
   createRun, startRun, setInput, aimDir, gunConeT, reticleT, stepRun,
   decisionInput, straightInput, simulateRun,
@@ -20,7 +20,7 @@ function check(name, cond) {
   else { failed++; failures.push(name); console.error('FAIL:', name); }
 }
 
-check('physics version is 0.2.1', VERSION === '0.2.1');
+check('physics version is 0.2.2', VERSION === '0.2.2');
 check('8 sorties defined', SORTIES.length === 8);
 check('sortie ids are 1..8 in order', SORTIES.every((s, i) => s.id === i + 1));
 check('every sortie has a name and a hint', SORTIES.every((s) => s.name && s.hint));
@@ -36,6 +36,17 @@ check('sortie 1 first turret is telegraphed (z >= 200)', SORTIES[0].spawns.filte
 check('sortie 1 opening is a straight teaching runway to z=200', segmentAt(SORTIES[0], 100).cx === 0 && segmentAt(SORTIES[0], 200).cx === 0);
 check('sortie 1 first bend is gentle (|cx| <= 4)', Math.abs(segmentAt(SORTIES[0], 300).cx) <= 4);
 check('every sortie ends with a carrier', SORTIES.every((s) => s.spawns.some((g) => g.type === 'carrier' && g.at >= s.length - 200)));
+// v0.2.2 tuning: scrape is 10/s (was 14), and the S6 choke cluster
+// is split (drone 3 @340 + drone 2 @365, interceptors @385).
+check('wall scrape costs 10 hull per second', WALL_SCRAPE_DPS === 10);
+check('carrier kill restores 25 hull', CARRIER_KILL_HULL === 25);
+check('S6 choke cluster is split, not stacked', (() => {
+  const s6 = sortieById(6);
+  const d340 = s6.spawns.find((g) => g.type === 'drone' && g.at === 340);
+  const d365 = s6.spawns.find((g) => g.type === 'drone' && g.at === 365);
+  const i385 = s6.spawns.find((g) => g.type === 'interceptor' && g.at === 385);
+  return d340?.count === 3 && d365?.count === 2 && i385?.count === 3;
+})());
 check('every sortie has interceptors and turrets', SORTIES.every((s) => s.spawns.some((g) => g.type === 'interceptor') && s.spawns.some((g) => g.type === 'turret')));
 
 // --- canyon geometry ---
@@ -324,6 +335,29 @@ check('sortieLost is a large event', FEEDBACK.sortieLost.tier === 'large');
   stepRun(run, DT);
   for (let i = 0; i < 30 && run.enemies.length; i++) { setInput(run, {}); stepRun(run, DT); }
   check('a missile kills the blocking carrier', run.enemies.length === 0);
+  // v0.2.2: a carrier kill pays back hull (checkpoint, not just a
+  // gate) and fires the carrierDown event the HUD toasts from.
+  // The missile kill above ran with hull near full, so prove the
+  // restore and the cap with a second carrier at a set hull.
+  run.enemies.push({ id: 105, type: 'carrier', x: run.x, y: run.y, z: run.z + 30, hp: 10, maxHp: 260, baseX: run.x, baseY: run.y, phase: 0, fireCd: 99, burstLeft: 0, burstCd: 0, homeX: 0, homeY: 0 });
+  run.hull = 50;
+  run.lockedId = 105; run.ammo = 8;
+  setInput(run, { missile: true });
+  let killEvs = stepRun(run, DT);
+  for (let i = 0; i < 30 && run.enemies.length; i++) { setInput(run, {}); killEvs = killEvs.concat(stepRun(run, DT)); }
+  check('a carrier kill restores hull', run.hull === 50 + CARRIER_KILL_HULL);
+  check('carrier kill fires the carrierDown event', killEvs.some((e) => e.type === 'carrierDown' && e.restored === CARRIER_KILL_HULL));
+  check('carrier kill restores at most the hull cap', (() => {
+    const r = startRun(SORTIES[0]);
+    r.spawnQueue = [];
+    r.hull = HULL_MAX - 5;
+    r.enemies.push({ id: 106, type: 'carrier', x: r.x, y: r.y, z: r.z + 30, hp: 10, maxHp: 260, baseX: r.x, baseY: r.y, phase: 0, fireCd: 99, burstLeft: 0, burstCd: 0, homeX: 0, homeY: 0 });
+    r.lockedId = 106; r.ammo = 8;
+    setInput(r, { missile: true });
+    stepRun(r, DT);
+    for (let i = 0; i < 30 && r.enemies.length; i++) { setInput(r, {}); stepRun(r, DT); }
+    return r.enemies.length === 0 && r.hull === HULL_MAX;
+  })());
   const z1 = run.z;
   setInput(run, {});
   stepRun(run, DT);

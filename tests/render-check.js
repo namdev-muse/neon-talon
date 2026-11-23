@@ -1,4 +1,4 @@
-// Neon Talon v0.2.1 — headless browser render check.
+// Neon Talon v0.2.2 — headless browser render check.
 // Serves the game dir over local HTTP, loads it in a headless browser, and
 // asserts the M1 core, by hook and by eye:
 //   - the menu renders over a LIVE 3D scene (the attract demo actually
@@ -137,8 +137,8 @@ try {
   }
 
   const version = await page.evaluate(() => window.__talon.version);
-  if (version !== '0.2.1') fail(`expected version 0.2.1, got ${version}`);
-  console.log('render-check: game module initialised, version 0.2.1');
+  if (version !== '0.2.2') fail(`expected version 0.2.2, got ${version}`);
+  console.log('render-check: game module initialised, version 0.2.2');
 
   // WebGL context exists and the canvas is on screen.
   const gl = await page.evaluate(() => {
@@ -154,7 +154,7 @@ try {
   // text anywhere the player can see.
   const menuText = await page.textContent('#menu');
   if (!menuText.includes('NEON TALON')) fail('menu title missing');
-  if (menuText.includes('v0.1.0') || menuText.includes('v0.2.0') || menuText.includes('v0.2.1') || menuText.includes('Three.js') || menuText.includes('0.160.0')) {
+  if (menuText.includes('v0.1.0') || menuText.includes('v0.2.0') || menuText.includes('v0.2.1') || menuText.includes('v0.2.2') || menuText.includes('Three.js') || menuText.includes('0.160.0')) {
     fail('menu shows version/engine text — it must live in the README only');
   }
   const playClass = await page.getAttribute('#btn-play', 'class');
@@ -384,10 +384,33 @@ try {
   // sweep's gameplay never reaches a carrier, so this is the only
   // shot that shows the bar visible).
   await page.screenshot({ path: path.join(SHOTS_DIR, 'carrier-bar-1280x720.png') });
-  await page.evaluate(() => window.__talon.resume());
   if (!carrierBar.shown) fail('carrier health bar should show while a carrier is in range');
   if (!(parseFloat(carrierBar.fill) > 0)) fail(`carrier health bar should have a real fill, got ${carrierBar.fill}`);
   console.log(`render-check: carrier health bar shows while a carrier is in range (fill ${carrierBar.fill})`);
+
+  // Missile damage drops the carrier bar (v0.2.2): the two live
+  // playtests never saw a missile land on a carrier while alive, so
+  // the bar drop under missiles was unverified even though the bar
+  // itself shows. The sim is still paused with the carrier in range
+  // from the step above and the autopilot is on at 4x — resume and
+  // wait for a missileHit on a carrier in the durable feedback log
+  // together with the DOM fill falling (one missile is 90/260 ≈
+  // 35%, so a 20-point drop is unambiguous) or the carrier dying.
+  // The mark is taken before the resume so a fast missile cannot be
+  // missed the way the transient lockedId was in v0.1.2.
+  const fill0 = parseFloat(carrierBar.fill);
+  const fbMark = await page.evaluate(() => window.__talon.info().feedback.length);
+  await page.evaluate(() => window.__talon.resume());
+  await page.waitForFunction((args) => {
+    const i = window.__talon.info();
+    const hit = i.feedback.slice(args.mark).some((f) => f.type === 'missileHit' && f.kind === 'carrier');
+    if (!hit) return false;
+    const carrier = i.enemies.find((e) => e.type === 'carrier');
+    if (!carrier) return true; // the missile killed it — the bar goes with it
+    const fill = parseFloat(document.getElementById('carrier-fill').style.width);
+    return fill < args.fill0 - 20;
+  }, { mark: fbMark, fill0 }, { timeout: 120000 });
+  console.log('render-check: a missile hit on the carrier drops the carrier bar');
 
   // Autopilot (decision bot through the public hooks) clears sortie 1.
   // The completion is observed on the player-facing complete screen:
