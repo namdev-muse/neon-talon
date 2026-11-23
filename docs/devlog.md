@@ -54,3 +54,58 @@ missiles need a lock.
   playtest happens in the 13:30 run against the live site.
 - No human has flown sorties 2–3 yet; the decision bot is the only
   pilot so far.
+
+## v0.1.1 — first live playtest NO-GO, fun fix (2026-11-23, 13:30 run)
+
+The first real-browser playtest of the live v0.1.0 site said NO-GO:
+sortie 1 was never cleared in 7 attempts (best 73%, 10 kills), a
+passive player died in ~15s, and the opening punished instead of
+teaching. Verified each claim against the shipped code before fixing;
+the "tutorial teaches missiles first" claim did not hold up (How to
+Play orders guns before missiles; the toast the tester quoted is the
+lock-acquired toast, not a tutorial step). What was real, and fixed:
+
+- **Spawn steering trap.** Mouse steering was absolute: wherever the
+  cursor rested after clicking Play steered the ship into a wall
+  before the player touched anything. Steering is now relative to the
+  mouse position at launch — that position is neutral.
+- **Spawn protection.** No damage lands in the first 4 seconds of a
+  run. Rams and shots still fire their feedback, so the threat reads;
+  the hull doesn't drop while the player is still orienting.
+- **Lock-on forgiveness.** LOCK_TIME 1.0s -> 0.8s, reticle cone
+  widened (1.4 -> 1.9 base, 0.03 -> 0.04 slope), lock decay 2x -> 1.5x.
+- **Damage readability.** New directional damage edge (red wash on
+  the side the hit came from), damage number pops on the ship for
+  hits >= 1, throttled wall-scrape warning toast, hit-flash
+  0.55 -> 0.7 alpha. Ship emissive raised so the fuselage reads from
+  behind.
+- **Perf toast once per session** instead of on every step-down.
+- **Bot missile discipline.** The wider lock cone let the decision
+  bot burn missiles on turrets; it reached sortie 3's second carrier
+  with 0 ammo and died grinding (traced: blocked at t=28.9, hull
+  63 -> 0 by t=39.0). The bot now fires missiles at carriers only —
+  turrets are gun targets (70 HP).
+- **Real bug found by the render check:** `fireMissile()` was dead
+  while the autopilot flew — the missile queue was only consumed in
+  the manual-input branch. Fixed; the queue is now consumed in both
+  branches. (The v0.1.0 check had passed only because the bot fired
+  missiles on its own.)
+
+### Test totals (v0.1.1)
+
+- smoke: 148 checks PASS (incl. new spawn-protection checks)
+- bot: decision clears all 3 (S1 23.3s hull 95, S2 27.5s hull 85,
+  S3 33.9s hull 32), straight-line loses all 3, guns-only loses all 3
+- render-check: PASS (zero console errors; autopilot clears sortie 1,
+  score 4552)
+- Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
+  inspected by eye — no clipping or overlap. Portrait still leaves a
+  large empty sky band above the canyon (carried known issue).
+
+### Still open after v0.1.1
+
+- The canyon reads flat/stark in places (big untextured wall planes,
+  black sky above the rims) — a visual-richness item for M3, not an
+  M1 blocker.
+- No human has yet cleared a sortie in real time; the re-playtest of
+  v0.1.1 decides M1.
