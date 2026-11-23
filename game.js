@@ -1,4 +1,4 @@
-// Neon Talon v0.1.5 — 3D neon aerial dogfighter (Three.js 0.160.0).
+// Neon Talon v0.2.0 — 3D neon aerial dogfighter (Three.js 0.160.0).
 // Fly a neon interceptor through canyon runs; guns and lock-on
 // missiles take down drones, interceptors and turrets; boost builds
 // heat, and heat management is the skill. Carriers fill the canyon

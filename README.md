@@ -31,13 +31,18 @@ A 3D neon aerial dogfighter built with [Three.js](https://threejs.org/) 0.160.0 
 | Touch: drag | Steer |
 | Touch: FIRE / BOOST / MISSILE | Fire guns / boost / fire missile |
 
-## Sorties (M1 — 3 of 3)
+## Sorties (M2 — 8 of 8)
 
 | Sortie | Identity |
 |---|---|
 | 1. First Flight | The teaching run — slow drones first, one telegraphed turret, a carrier at the end. |
 | 2. Ember Strait | Tighter rock, swinging bends — interceptors hunt in pairs and turrets guard the gates. |
 | 3. Widow's Spine | Narrow gates and hard swings — turrets in pairs, carriers behind interceptor screens. |
+| 4. Crimson Hollow | Turret alley — pairs guard every gate; the carriers still want missiles. |
+| 5. Verdant Rift | Wide rock, hunting packs — interceptors come in threes and they shoot. |
+| 6. Azure Deep | The canyon breathes — low ceilings, high floors; fly the altitude the rock gives you. |
+| 7. Golden Maw | Three carriers, narrow gates — missiles are the budget. |
+| 8. Void Crown | The crown — everything at once. Narrow, swinging, guarded. |
 
 ## Development
 
@@ -52,11 +57,11 @@ npm run serve     # serve locally on http://localhost:8127
 
 - `physics.js` — pure simulation core (no DOM, no Three.js): flight model, heat, guns, lock-on, missiles, enemies, canyon collision, bots. Fully deterministic.
 - `game.js` — Three.js rendering, menu/HUD, audio, game feel, public hooks (`window.__talon`).
-- `tests/smoke.js` — 146 Node checks over the simulation.
-- `tests/bot.js` — the anti-slop gates: the decision bot clears all 3 sorties, a straight-line hold-fire bot loses on all 3, and a guns-only bot loses on all 3 (carriers are missile problems).
+- `tests/smoke.js` — 205 Node checks over the simulation.
+- `tests/bot.js` — the anti-slop gates: the decision bot clears all 8 sorties, a straight-line hold-fire bot loses on all 8, and a guns-only bot loses on all 8 (carriers are missile problems).
 
 ## Anti-slop gates (verified by `npm run bot`)
 
 - A bot that flies straight and holds fire loses on every sortie (walls, rams, turret fire).
-- A bot that flies with real boost/heat and lock-on decisions clears all 3 sorties.
+- A bot that flies with real boost/heat and lock-on decisions clears all 8 sorties.
 - A bot that flies well but never uses missiles loses on every sortie — carriers block the canyon until destroyed, and guns do 30% damage to their armour.
