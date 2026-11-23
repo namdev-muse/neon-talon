@@ -20,7 +20,7 @@ function check(name, cond) {
   else { failed++; failures.push(name); console.error('FAIL:', name); }
 }
 
-check('physics version is 0.1.0', VERSION === '0.1.0');
+check('physics version is 0.1.1', VERSION === '0.1.1');
 check('3 sorties defined', SORTIES.length === 3);
 check('sortie ids are 1..3 in order', SORTIES.every((s, i) => s.id === i + 1));
 check('every sortie has a name and a hint', SORTIES.every((s) => s.name && s.hint));
@@ -189,9 +189,21 @@ check('sortieLost is a large event', FEEDBACK.sortieLost.tier === 'large');
   check('carrier takes 30% gun damage', run4.enemies[0].hp === 260 - GUN_DAMAGE * 0.3);
 }
 
+// --- spawn protection (v0.1.1): no damage in the first 4 seconds ---
+{
+  const run = startRun(SORTIES[0]);
+  run.x = 999; // pressed to the right wall from the first step
+  setInput(run, { steerX: 1 });
+  for (let i = 0; i < Math.ceil(3 / DT); i++) stepRun(run, DT);
+  check('spawn protection: no hull damage in the first 4 seconds', run.hull === HULL_MAX);
+  for (let i = 0; i < Math.ceil(2 / DT); i++) stepRun(run, DT);
+  check('spawn protection ends: scraping after 4s damages the hull', run.hull < HULL_MAX);
+}
+
 // --- wall collision ---
 {
   const run = startRun(SORTIES[0]);
+  for (let i = 0; i < Math.ceil(4.1 / DT); i++) { setInput(run, {}); stepRun(run, DT); }
   run.x = 999; // slam into the right wall
   const hull0 = run.hull;
   setInput(run, { steerX: 1 });
@@ -216,6 +228,7 @@ check('sortieLost is a large event', FEEDBACK.sortieLost.tier === 'large');
 {
   const run = startRun(SORTIES[0]);
   run.spawnQueue = [];
+  for (let i = 0; i < Math.ceil(4.1 / DT); i++) { setInput(run, {}); stepRun(run, DT); }
   run.enemies.push({ id: 103, type: 'carrier', x: run.x, y: run.y, z: run.z + 8, hp: 260, maxHp: 260, baseX: run.x, baseY: run.y, phase: 0, fireCd: 99, burstLeft: 0, burstCd: 0, homeX: 0, homeY: 0 });
   const z0 = run.z;
   setInput(run, {});
