@@ -1,4 +1,4 @@
-// Neon Talon v0.1.3 — 3D neon aerial dogfighter (Three.js 0.160.0).
+// Neon Talon v0.1.4 — 3D neon aerial dogfighter (Three.js 0.160.0).
 // Fly a neon interceptor through canyon runs; guns and lock-on
 // missiles take down drones, interceptors and turrets; boost builds
 // heat, and heat management is the skill. Carriers fill the canyon
@@ -222,16 +222,26 @@ let boostHeld = false;
 
 // Input state (keyboard + mouse + touch, merged every frame).
 const keys = new Set();
-// Mouse steering (v0.1.3): chase-the-cursor — the ship steers toward
-// the cursor's position relative to the ship on screen, so the ship
-// flies where the player points and levels once it is under the
-// cursor. This replaces the v0.1.1 spawn-relative model: the live
-// playtest showed players naturally point at the tunnel mouth, and
-// relative steering turned that into an uncontrolled climb out of the
-// canyon. The spawn trap the relative model fixed is still fixed — at
-// launch the cursor sits over the Play button, roughly under the ship,
-// so steering starts near zero.
-const mouseSteer = { active: false, x: 0, y: 0 };
+// Mouse steering (v0.1.4): screen-centre relative, with a dead zone
+// around the centre. The ship steers by the cursor's offset from the
+// centre of the screen — the tunnel mouth ahead sits at the screen
+// centre, so pointing at it flies level, and moving the cursor from
+// there steers. This replaces chase-the-cursor (v0.1.3): with a chase
+// camera the ship stays fixed on screen, so a cursor at the tunnel
+// mouth was always ~250px above the ship and the climb never turned
+// off — the v0.1.3 playtest reproduced the v0.1.2 failure exactly.
+// Steering arms only once the cursor has moved 30px from where it
+// sat at launch, so the resting cursor after clicking Play (left of
+// centre, over the Play button) does not steer the ship before the
+// player touches anything (the v0.1.0 spawn trap).
+const mouseSteer = { active: false, x: 0, y: 0, armX: null, armY: null };
+// Last pointer position anywhere on the page, so a run can arm mouse
+// steering from where the mouse actually is at launch.
+const lastPointer = { x: null, y: null };
+window.addEventListener('pointermove', (e) => {
+  lastPointer.x = e.clientX;
+  lastPointer.y = e.clientY;
+}, { passive: true });
 let fireHeld = false, boostKeyHeld = false;
 let touchSteer = null; // {x, y} drag vector or null
 let touchFire = false, touchBoost = false;
@@ -304,7 +314,7 @@ const GEOS = {
   shipTail: new THREE.BoxGeometry(0.14, 1.1, 1.0),
   shipCockpit: new THREE.SphereGeometry(0.42, 12, 12),
   engine: new THREE.SphereGeometry(0.28, 8, 8),
-  shot: new THREE.SphereGeometry(0.32, 8, 8),
+  shot: new THREE.SphereGeometry(0.45, 8, 8),
   missile: new THREE.ConeGeometry(0.35, 1.6, 6),
   particle: new THREE.OctahedronGeometry(0.22),
   rock: new THREE.OctahedronGeometry(1),
@@ -904,11 +914,12 @@ function startSortie(id) {
   buildCanyon(s);
   clearEnemyMeshes();
   feedbackLog = [];
-  // Mouse steering starts neutral (v0.1.3 chase-the-cursor: the ship
-  // steers toward the cursor relative to itself, so it flies level
-  // until the player actually moves the mouse).
+  // Mouse steering starts neutral and disarmed (v0.1.4): it arms
+  // once the cursor has moved 30px from where it sat at launch.
   mouseSteer.active = false;
   mouseSteer.x = 0; mouseSteer.y = 0;
+  mouseSteer.armX = lastPointer.x ?? window.innerWidth / 2;
+  mouseSteer.armY = lastPointer.y ?? window.innerHeight / 2;
   lastWallToast = 0;
   phase = 'run';
   screenStack = [];
@@ -1034,18 +1045,34 @@ function queueMissile() {
 }
 if (renderer) {
   const canvas = renderer.domElement;
+  // Screen-centre steering curve (v0.1.4): the cursor's offset from
+  // the centre of the screen, normalised so the screen edge is ±1.
+  // A dead zone of 0.2 (10% of the screen) around the centre reads
+  // as level flight; beyond it the steer ramps smoothly to full
+  // deflection at the edge.
+  function centreSteer(pos, dim) {
+    const d = (pos - dim / 2) / (dim / 2);
+    const dead = 0.2;
+    if (Math.abs(d) <= dead) return 0;
+    return clamp((Math.abs(d) - dead) / (1 - dead), 0, 1) * Math.sign(d);
+  }
   canvas.addEventListener('pointermove', (e) => {
     if (phase !== 'run' || paused || !run) return;
-    // Chase-the-cursor steering (v0.1.3): the ship steers toward the
-    // cursor's position relative to the ship on screen. Put the cursor
-    // where you want to fly; once the ship is under the cursor it
-    // flies level. Steering eases as the ship approaches the cursor,
-    // so pointing at the tunnel mouth climbs gently and then levels
-    // instead of climbing without limit.
-    const s = projectToScreen(run.x, run.y, 0);
-    mouseSteer.active = true;
-    mouseSteer.x = clamp((e.clientX - s.x) / (window.innerWidth * 0.35), -1, 1);
-    mouseSteer.y = clamp(-((e.clientY - s.y) / (window.innerHeight * 0.35)), -1, 1);
+    // Screen-centre steering (v0.1.4): the ship steers by the
+    // cursor's offset from the centre of the screen, with a dead
+    // zone around the centre. The tunnel mouth ahead sits at the
+    // screen centre, so pointing at it flies level; moving the
+    // cursor from there steers. Steering arms only once the cursor
+    // has moved 30px from where it sat at launch (the v0.1.0 spawn
+    // trap: the resting cursor over the Play button is left of
+    // centre and must not steer before the player touches anything).
+    if (!mouseSteer.active) {
+      const dx = e.clientX - mouseSteer.armX, dy = e.clientY - mouseSteer.armY;
+      if (Math.hypot(dx, dy) < 30) return;
+      mouseSteer.active = true;
+    }
+    mouseSteer.x = centreSteer(e.clientX, window.innerWidth);
+    mouseSteer.y = -centreSteer(e.clientY, window.innerHeight);
   });
   canvas.addEventListener('pointerdown', (e) => {
     if (phase !== 'run' || paused) return;
