@@ -1,4 +1,4 @@
-// Neon Talon v0.1.4 — headless browser render check.
+// Neon Talon v0.1.5 — headless browser render check.
 // Serves the game dir over local HTTP, loads it in a headless browser, and
 // asserts the M1 core, by hook and by eye:
 //   - the menu renders over a LIVE 3D scene (the attract demo actually
@@ -137,8 +137,8 @@ try {
   }
 
   const version = await page.evaluate(() => window.__talon.version);
-  if (version !== '0.1.4') fail(`expected version 0.1.4, got ${version}`);
-  console.log('render-check: game module initialised, version 0.1.4');
+  if (version !== '0.1.5') fail(`expected version 0.1.5, got ${version}`);
+  console.log('render-check: game module initialised, version 0.1.5');
 
   // WebGL context exists and the canvas is on screen.
   const gl = await page.evaluate(() => {
@@ -358,6 +358,36 @@ try {
   if (ammoAfterE === null) fail('manual E did not fire a missile on a gold lock after 3 attempts');
   console.log(`render-check: manual E fires a missile on a gold lock — ammo ${ammoBeforeE} -> ${ammoAfterE}`);
 
+  // Carrier health bar (v0.1.5): while the autopilot flies sortie 1
+  // at 4x, wait until a carrier is within firing range, then PAUSE
+  // to freeze the sim with the carrier in range and check the bar
+  // is visible with a real fill — the v0.1.4 playtest fired missiles
+  // at the carrier and never saw whether it was dying. The clear
+  // step below restarts fresh, so this step does not disturb it.
+  await page.evaluate(() => { window.__talon.restart(); window.__talon.setSpeed(4); window.__talon.autopilot(true); });
+  await page.waitForFunction(() => {
+    const i = window.__talon.info();
+    return i.enemies.some((e) => e.type === 'carrier' && e.z - i.ship.z >= 0 && e.z - i.ship.z <= 90);
+  }, null, { timeout: 120000 });
+  // Pause first, then give the 100ms HUD tick a beat to run while
+  // the sim is frozen — the bar is driven by updateHUD, not by the
+  // sim step, so reading it the same frame the carrier enters range
+  // races the tick.
+  await page.evaluate(() => window.__talon.pause());
+  await page.waitForTimeout(300);
+  const carrierBar = await page.evaluate(() => ({
+    shown: !document.getElementById('carrier-bar').classList.contains('hidden'),
+    fill: document.getElementById('carrier-fill').style.width,
+  }));
+  // Screenshot the bar in place for the by-eye check (the size
+  // sweep's gameplay never reaches a carrier, so this is the only
+  // shot that shows the bar visible).
+  await page.screenshot({ path: path.join(SHOTS_DIR, 'carrier-bar-1280x720.png') });
+  await page.evaluate(() => window.__talon.resume());
+  if (!carrierBar.shown) fail('carrier health bar should show while a carrier is in range');
+  if (!(parseFloat(carrierBar.fill) > 0)) fail(`carrier health bar should have a real fill, got ${carrierBar.fill}`);
+  console.log(`render-check: carrier health bar shows while a carrier is in range (fill ${carrierBar.fill})`);
+
   // Autopilot (decision bot through the public hooks) clears sortie 1.
   // The completion is observed on the player-facing complete screen:
   // onRunEnd() swaps the run for the menu demo in the same frame the
@@ -469,4 +499,4 @@ if (errors.length) {
   for (const e of errors) console.error('  ' + e);
   process.exit(1);
 }
-console.log('render-check: PASS — zero console errors, menu + gates + screen-space steering + mouse steer + heat + guns + lock/missile + autopilot clear + pause + ?sortie= seed + accessibility + FPS guard + R restart from the death screen all verified');
+console.log('render-check: PASS — zero console errors, menu + gates + screen-space steering + mouse steer + heat + guns + lock/missile + carrier health bar + autopilot clear + pause + ?sortie= seed + accessibility + FPS guard + R restart from the death screen all verified');
