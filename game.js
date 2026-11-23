@@ -1,4 +1,4 @@
-// Neon Talon v0.2.2 — 3D neon aerial dogfighter (Three.js 0.160.0).
+// Neon Talon v0.2.3 — 3D neon aerial dogfighter (Three.js 0.160.0).
 // Fly a neon interceptor through canyon runs; guns and lock-on
 // missiles take down drones, interceptors and turrets; boost builds
 // heat, and heat management is the skill. Carriers fill the canyon
@@ -629,7 +629,7 @@ function toast(msg) {
   // v0.1.2: clear the text when the toast hides, so the stale message
   // doesn't linger in the page text (and the live region) on the
   // death screen and the menu after the run ends.
-  toast._t = setTimeout(() => { el.classList.remove('show'); el.textContent = ''; }, 2400);
+  toast._t = setTimeout(() => { el.classList.remove('show'); el.textContent = ''; $('sr-status').textContent = ''; }, 2400);
   $('sr-status').textContent = msg;
 }
 // Directional damage edge (v0.1.1, live-playtest fix): a hit must say
@@ -984,6 +984,11 @@ function onRunEnd() {
   const toastEl = $('hud-toast');
   toastEl.classList.remove('show');
   toastEl.textContent = '';
+  // v0.2.3: the toast also writes the message into #sr-status (the
+  // screen-reader live region), which nothing ever cleared — the
+  // v0.2.2 playtest found the last lock toast's text still sitting
+  // in the page's DOM/accessibility tree after quitting to the menu.
+  $('sr-status').textContent = '';
   musicLeadOn = false;
   $('reticle').classList.add('hidden');
   $('touch-controls').classList.add('hidden');
@@ -1029,6 +1034,8 @@ function quitToMenu() {
   const toastEl = $('hud-toast');
   toastEl.classList.remove('show');
   toastEl.textContent = '';
+  // v0.2.3: also clear the screen-reader live region (see onRunEnd).
+  $('sr-status').textContent = '';
   $('reticle').classList.add('hidden');
   $('touch-controls').classList.add('hidden');
   $('blocked-banner').classList.add('hidden');

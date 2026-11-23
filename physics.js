@@ -14,7 +14,7 @@
 // real flying decisions: a bot that flies straight and holds fire
 // LOSES on every sortie (see tests/bot.js).
 
-export const VERSION = '0.2.2';
+export const VERSION = '0.2.3';
 export const DT = 1 / 60;
 export const HULL_MAX = 100;
 export const HEAT_MAX = 100;
