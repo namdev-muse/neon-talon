@@ -412,3 +412,42 @@ dies at z=621, unchanged), guns-only loses all 3.
 - Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
   inspected by eye — no clipping or overlap. Portrait still leaves
   a large empty sky band above the canyon (carried known issue).
+
+## M2 — Sortie craft (v0.2.0, 2026-11-23, 17:30 run)
+
+Five hand-crafted sorties added (3 → 8), each with its own identity:
+Crimson Hollow (turret alley — pairs guard every gate), Verdant Rift
+(wide rock, interceptor hunting packs of three), Azure Deep (vertical —
+low ceilings and high floors force the altitude), Golden Maw (three
+carriers, narrow gates, missile budget), Void Crown (finale — narrowest,
+swingiest, 3 carriers, 14 turrets). Threat grows monotonically
+1382 → 2060 → 2464 → 2920 → 3196 → 3440 → 3858 → 4186; lengths
+700 → 1200; every sortie 25+ enemies, ends with a carrier, has
+interceptors and turrets. No game.js change needed — the menu already
+laid 8 cards out 2-across (the M1 CSS anticipated this); no CSS change.
+
+### Test totals (M2, local tree)
+
+- node --check PASS (game, physics, all tests)
+- smoke: 205 checks PASS (was 162)
+- bot: decision clears all 8 (hulls 94/72/60/56/79/49/65/51 — S5
+  breathes a little after S4, S6 is the tightest at 49; no sortie
+  below the 15-hull margin), straight-line loses all 8, guns-only
+  loses all 8
+- render-check: PASS, zero console errors — 8 sortie cards, 7 locked
+  on a fresh save, ?sortie=8 reaches Void Crown, autopilot clears
+  sortie 1 (4286)
+- Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
+  inspected by eye — 8 cards fit at 1280x720 with no clipping or
+  overlap; portrait still leaves a large empty sky band above the
+  canyon (carried known issue).
+
+### Known issues (M2)
+
+- M2 is NOT done until a real-browser FUN playtest says GO on
+  sorties 4–8 — that playtest is delegated after the v0.2.0 push
+  and its verdict lands in the 19:30 run.
+- Bot hull margins are not monotonic by identity (S5 79, S7 65) —
+  the bot dodges perfectly, so the human playtest is the real
+  curve check; watch S5 for feeling like a breather and S7/S8
+  for the three-carrier block grind.
