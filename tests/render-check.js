@@ -1,4 +1,4 @@
-// Neon Talon v0.1.3 — headless browser render check.
+// Neon Talon v0.1.4 — headless browser render check.
 // Serves the game dir over local HTTP, loads it in a headless browser, and
 // asserts the M1 core, by hook and by eye:
 //   - the menu renders over a LIVE 3D scene (the attract demo actually
@@ -137,8 +137,8 @@ try {
   }
 
   const version = await page.evaluate(() => window.__talon.version);
-  if (version !== '0.1.3') fail(`expected version 0.1.3, got ${version}`);
-  console.log('render-check: game module initialised, version 0.1.3');
+  if (version !== '0.1.4') fail(`expected version 0.1.4, got ${version}`);
+  console.log('render-check: game module initialised, version 0.1.4');
 
   // WebGL context exists and the canvas is on screen.
   const gl = await page.evaluate(() => {
@@ -255,10 +255,9 @@ try {
 
   // Space fires the guns; holding fire scores kills and the kill
   // feedback bundle fires in full. First neutralise mouse steering
-  // (v0.1.3 chase-the-cursor: the neutral point is the ship itself,
-  // so the mouse must sit on the ship's screen position).
-  const shipScreen = await page.evaluate(() => window.__talon.info().ship.screen);
-  await page.mouse.move(shipScreen.x, shipScreen.y);
+  // (v0.1.4 screen-centre steering: the neutral point is the centre
+  // of the 1280x720 viewport, not the ship).
+  await page.mouse.move(640, 360);
   await page.waitForTimeout(400);
   await page.keyboard.down(' ');
   await page.waitForFunction(() => {
