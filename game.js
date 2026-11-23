@@ -1,4 +1,4 @@
-// Neon Talon v0.2.0 — 3D neon aerial dogfighter (Three.js 0.160.0).
+// Neon Talon v0.2.1 — 3D neon aerial dogfighter (Three.js 0.160.0).
 // Fly a neon interceptor through canyon runs; guns and lock-on
 // missiles take down drones, interceptors and turrets; boost builds
 // heat, and heat management is the skill. Carriers fill the canyon
@@ -804,7 +804,19 @@ function updateHUD() {
   const frac = run.lockedId !== null ? 1 : clamp(run.lockT / LOCK_TIME, 0, 1);
   lockRing.style.strokeDashoffset = `${289 * (1 - frac)}`;
   $('reticle').classList.toggle('locked', run.lockedId !== null);
-  $('lock-label').classList.toggle('hidden', run.lockedId === null);
+  // Name the lock target (v0.2.1): the playtest fired missiles at a
+  // gold lock on an escort and saw the carrier bar not move — nothing
+  // said WHAT was locked. Show the target kind while locking and once
+  // locked, so E is never a blind press.
+  const lockTarget = run.lockTargetId !== null
+    ? run.enemies.find((e) => e.id === run.lockTargetId) : null;
+  const lockLabel = $('lock-label');
+  if (lockTarget) {
+    lockLabel.textContent = `${run.lockedId !== null ? 'LOCK' : 'LOCKING'} — ${lockTarget.type.toUpperCase()}`;
+    lockLabel.classList.remove('hidden');
+  } else {
+    lockLabel.classList.add('hidden');
+  }
   $('blocked-banner').classList.toggle('hidden', !run.blocked);
   $('low-hull').classList.toggle('on', run.hull <= 30);
   $('btn-mute-hud').textContent = save.muted ? 'Sound: Off' : 'Sound: On';

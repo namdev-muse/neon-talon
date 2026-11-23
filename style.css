@@ -338,6 +338,7 @@ body.high-contrast .btn, body.high-contrast .map-card, body.high-contrast .tower
   position: absolute; left: 50%; top: 128px; transform: translateX(-50%);
   color: #fbbf24; font-weight: 700; letter-spacing: 0.2em; font-size: 0.9rem;
   text-shadow: 0 0 0.6rem rgba(251, 191, 36, 0.9);
+  white-space: nowrap;
 }
 .blocked-banner {
   position: fixed; left: 50%; top: max(4.5rem, env(safe-area-inset-top));

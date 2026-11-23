@@ -14,7 +14,7 @@
 // real flying decisions: a bot that flies straight and holds fire
 // LOSES on every sortie (see tests/bot.js).
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.2.1';
 export const DT = 1 / 60;
 export const HULL_MAX = 100;
 export const HEAT_MAX = 100;
@@ -256,8 +256,8 @@ export const SORTIES = [
     length: 1000,
     segments: [
       { z0: 0, z1: 160, cx: 0, hw: 10, floor: 2, ceil: 16 },
-      { z0: 160, z1: 320, cx: 7, hw: 9, floor: 2, ceil: 16 },
-      { z0: 320, z1: 480, cx: -7, hw: 9, floor: 2, ceil: 15 },
+      { z0: 160, z1: 320, cx: 5, hw: 9, floor: 2, ceil: 16 },
+      { z0: 320, z1: 480, cx: -5, hw: 9, floor: 2, ceil: 15 },
       { z0: 480, z1: 640, cx: 6, hw: 9, floor: 2, ceil: 16 },
       { z0: 640, z1: 800, cx: -6, hw: 9, floor: 3, ceil: 15 },
       { z0: 800, z1: 1000, cx: 0, hw: 10, floor: 2, ceil: 16 },
@@ -268,14 +268,14 @@ export const SORTIES = [
       { at: 140, type: 'drone', count: 4, dx: 1, dy: 10, spread: 4 },
       { at: 180, type: 'turret', side: 'left', y: 9 },
       { at: 220, type: 'interceptor', count: 3, dx: 0, dy: 9, spread: 5 },
-      { at: 240, type: 'interceptor', count: 3, dx: -2, dy: 8, spread: 5 },
-      { at: 260, type: 'drone', count: 4, dx: 0, dy: 9, spread: 4 },
-      { at: 300, type: 'interceptor', count: 3, dx: 0, dy: 9, spread: 5 },
-      { at: 340, type: 'drone', count: 4, dx: 0, dy: 10, spread: 4 },
-      { at: 380, type: 'interceptor', count: 3, dx: 1, dy: 9, spread: 5 },
-      { at: 420, type: 'turret', side: 'right', y: 10 },
-      { at: 460, type: 'carrier', dx: 0, dy: 9 },
-      { at: 460, type: 'interceptor', count: 2, dx: -4, dy: 10, spread: 3 },
+      { at: 270, type: 'interceptor', count: 3, dx: -2, dy: 8, spread: 5 },
+      { at: 310, type: 'drone', count: 4, dx: 0, dy: 9, spread: 4 },
+      { at: 350, type: 'interceptor', count: 3, dx: 0, dy: 9, spread: 5 },
+      { at: 390, type: 'drone', count: 4, dx: 0, dy: 10, spread: 4 },
+      { at: 430, type: 'interceptor', count: 3, dx: 1, dy: 9, spread: 5 },
+      { at: 450, type: 'turret', side: 'right', y: 10 },
+      { at: 480, type: 'carrier', dx: 0, dy: 9 },
+      { at: 480, type: 'interceptor', count: 2, dx: -4, dy: 10, spread: 3 },
       { at: 500, type: 'drone', count: 4, dx: 0, dy: 9, spread: 4 },
       { at: 540, type: 'interceptor', count: 3, dx: 0, dy: 9, spread: 5 },
       { at: 580, type: 'drone', count: 4, dx: 0, dy: 10, spread: 4 },
@@ -301,9 +301,11 @@ export const SORTIES = [
     segments: [
       // Vertical identity: the low-ceiling runs (ceil 13) and the
       // high-floor runs (floor 5) force the player to fly the
-      // altitude the rock gives, not the one they like.
+      // altitude the rock gives, not the one they like. v0.2.1: the
+      // first pinch is softened (ceil 14, hw 9) — the playtest died
+      // on the first low-ceiling run before the lesson landed.
       { z0: 0, z1: 150, cx: 0, hw: 8, floor: 2, ceil: 15 },
-      { z0: 150, z1: 300, cx: 5, hw: 8, floor: 2, ceil: 13 },
+      { z0: 150, z1: 300, cx: 5, hw: 9, floor: 2, ceil: 14 },
       { z0: 300, z1: 450, cx: -5, hw: 7, floor: 5, ceil: 16 },
       { z0: 450, z1: 600, cx: 4, hw: 8, floor: 2, ceil: 13 },
       { z0: 600, z1: 750, cx: -4, hw: 7, floor: 5, ceil: 16 },
@@ -319,7 +321,7 @@ export const SORTIES = [
       { at: 240, type: 'interceptor', count: 2, dx: -1, dy: 8, spread: 4 },
       { at: 260, type: 'turret', side: 'left', y: 8 },
       { at: 280, type: 'drone', count: 4, dx: 0, dy: 8, spread: 3 },
-      { at: 320, type: 'turret', side: 'left', y: 13 },
+      { at: 300, type: 'turret', side: 'left', y: 13 },
       { at: 340, type: 'drone', count: 5, dx: 0, dy: 12, spread: 4 },
       { at: 380, type: 'interceptor', count: 3, dx: 0, dy: 12, spread: 5 },
       { at: 400, type: 'turret', side: 'right', y: 12 },
@@ -364,16 +366,16 @@ export const SORTIES = [
       { at: 60, type: 'drone', count: 3, dx: 0, dy: 9, spread: 3 },
       { at: 100, type: 'interceptor', count: 2, dx: 0, dy: 9, spread: 5 },
       { at: 140, type: 'turret', side: 'right', y: 9 },
-      { at: 160, type: 'turret', side: 'left', y: 11 },
+      { at: 175, type: 'turret', side: 'left', y: 11 },
       { at: 200, type: 'drone', count: 4, dx: 0, dy: 9, spread: 4 },
       { at: 240, type: 'interceptor', count: 3, dx: 0, dy: 9, spread: 5 },
-      { at: 280, type: 'turret', side: 'left', y: 8 },
-      { at: 300, type: 'drone', count: 3, dx: 0, dy: 10, spread: 3 },
-      { at: 320, type: 'drone', count: 4, dx: 1, dy: 9, spread: 4 },
-      { at: 340, type: 'turret', side: 'right', y: 8 },
-      { at: 360, type: 'interceptor', count: 2, dx: 0, dy: 9, spread: 5 },
-      { at: 400, type: 'carrier', dx: 0, dy: 9 },
-      { at: 400, type: 'interceptor', count: 2, dx: -4, dy: 10, spread: 3 },
+      { at: 290, type: 'turret', side: 'left', y: 8 },
+      { at: 320, type: 'drone', count: 3, dx: 0, dy: 10, spread: 3 },
+      { at: 350, type: 'drone', count: 4, dx: 1, dy: 9, spread: 4 },
+      { at: 375, type: 'turret', side: 'right', y: 8 },
+      { at: 400, type: 'interceptor', count: 2, dx: 0, dy: 9, spread: 5 },
+      { at: 420, type: 'carrier', dx: 0, dy: 9 },
+      { at: 420, type: 'interceptor', count: 2, dx: -4, dy: 10, spread: 3 },
       { at: 460, type: 'turret', side: 'right', y: 10 },
       { at: 480, type: 'turret', side: 'left', y: 8 },
       { at: 520, type: 'drone', count: 5, dx: 0, dy: 9, spread: 4 },
@@ -405,8 +407,8 @@ export const SORTIES = [
     length: 1200,
     segments: [
       { z0: 0, z1: 150, cx: 0, hw: 8, floor: 2, ceil: 15 },
-      { z0: 150, z1: 300, cx: 7, hw: 7, floor: 2, ceil: 14 },
-      { z0: 300, z1: 450, cx: -7, hw: 7, floor: 2, ceil: 14 },
+      { z0: 150, z1: 300, cx: 5, hw: 7, floor: 2, ceil: 14 },
+      { z0: 300, z1: 450, cx: -5, hw: 7, floor: 2, ceil: 14 },
       { z0: 450, z1: 600, cx: 7, hw: 6, floor: 2, ceil: 14 },
       { z0: 600, z1: 750, cx: -7, hw: 6, floor: 3, ceil: 14 },
       { z0: 750, z1: 900, cx: 6, hw: 7, floor: 2, ceil: 14 },
@@ -417,16 +419,16 @@ export const SORTIES = [
       { at: 60, type: 'drone', count: 3, dx: 0, dy: 9, spread: 3 },
       { at: 100, type: 'interceptor', count: 3, dx: 0, dy: 9, spread: 5 },
       { at: 140, type: 'turret', side: 'right', y: 9 },
-      { at: 160, type: 'turret', side: 'left', y: 11 },
+      { at: 175, type: 'turret', side: 'left', y: 11 },
       { at: 200, type: 'drone', count: 4, dx: 0, dy: 9, spread: 4 },
       { at: 240, type: 'interceptor', count: 3, dx: 0, dy: 9, spread: 5 },
-      { at: 280, type: 'turret', side: 'left', y: 8 },
-      { at: 300, type: 'drone', count: 4, dx: 0, dy: 10, spread: 4 },
-      { at: 320, type: 'turret', side: 'right', y: 9 },
-      { at: 340, type: 'interceptor', count: 2, dx: 0, dy: 9, spread: 5 },
-      { at: 380, type: 'turret', side: 'right', y: 10 },
-      { at: 400, type: 'turret', side: 'left', y: 9 },
-      { at: 440, type: 'drone', count: 4, dx: 0, dy: 9, spread: 4 },
+      { at: 290, type: 'turret', side: 'left', y: 8 },
+      { at: 320, type: 'drone', count: 4, dx: 0, dy: 10, spread: 4 },
+      { at: 350, type: 'turret', side: 'right', y: 9 },
+      { at: 380, type: 'interceptor', count: 2, dx: 0, dy: 9, spread: 5 },
+      { at: 410, type: 'turret', side: 'right', y: 10 },
+      { at: 435, type: 'turret', side: 'left', y: 9 },
+      { at: 460, type: 'drone', count: 4, dx: 0, dy: 9, spread: 4 },
       { at: 480, type: 'carrier', dx: 0, dy: 9 },
       { at: 480, type: 'interceptor', count: 2, dx: -4, dy: 10, spread: 3 },
       { at: 520, type: 'turret', side: 'right', y: 11 },
