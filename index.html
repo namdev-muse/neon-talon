@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Neon Talon — 3D Neon Aerial Dogfighter</title>
+<meta name="description" content="Neon Talon: a 3D neon aerial dogfighter. Fly the interceptor through canyon runs, manage boost heat, lock on and break the carriers.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="game-container"></div>
+<div id="hit-flash" class="hit-flash" aria-hidden="true"></div>
+<div id="low-hull" class="low-hull" aria-hidden="true"></div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div class="hud-left">
+    <span id="hud-sortie">Sortie 1 — First Flight</span>
+    <span id="hud-progress">0%</span>
+  </div>
+  <div class="hud-mid">
+    <span id="hud-score">Score 0</span>
+    <span id="hud-kills">Kills 0</span>
+  </div>
+  <div class="hud-right">
+    <button id="btn-mute-hud" class="icon-btn" type="button" aria-label="Toggle sound">Sound: On</button>
+    <button id="btn-pause" class="icon-btn" type="button" aria-label="Pause game">Pause</button>
+  </div>
+  <div class="hud-bars">
+    <div class="bar-row">
+      <span class="bar-label">Hull</span>
+      <div class="bar"><div id="hull-fill" class="bar-fill hull"></div></div>
+      <span id="hull-value" class="bar-value">100</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">Heat</span>
+      <div class="bar"><div id="heat-fill" class="bar-fill heat"></div></div>
+      <span id="heat-value" class="bar-value">0</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">Missiles</span>
+      <div id="ammo-pips" class="ammo-pips" aria-label="Missiles"></div>
+    </div>
+  </div>
+</div>
+<div id="blocked-banner" class="blocked-banner hidden" role="alert">Carrier blocking the canyon — break it with missiles</div>
+<div id="hud-toast" class="hud-toast" aria-hidden="true"></div>
+<div id="pops" class="pops" aria-hidden="true"></div>
+<div id="sr-status" class="sr-only" role="status" aria-live="polite"></div>
+
+<!-- Reticle (centre of screen) -->
+<div id="reticle" class="reticle hidden" aria-hidden="true">
+  <svg viewBox="0 0 120 120" width="120" height="120">
+    <circle class="reticle-ring" cx="60" cy="60" r="46" />
+    <circle id="lock-ring" class="lock-ring" cx="60" cy="60" r="46" />
+    <circle cx="60" cy="60" r="3" class="reticle-dot" />
+    <line x1="60" y1="6" x2="60" y2="20" class="reticle-tick" />
+    <line x1="60" y1="100" x2="60" y2="114" class="reticle-tick" />
+    <line x1="6" y1="60" x2="20" y2="60" class="reticle-tick" />
+    <line x1="100" y1="60" x2="114" y2="60" class="reticle-tick" />
+  </svg>
+  <span id="lock-label" class="lock-label hidden">LOCK</span>
+</div>
+
+<!-- Touch controls -->
+<div id="touch-controls" class="touch-controls hidden">
+  <button id="btn-touch-fire" class="touch-btn" type="button" aria-label="Fire guns">FIRE</button>
+  <button id="btn-touch-boost" class="touch-btn" type="button" aria-label="Boost">BOOST</button>
+  <button id="btn-touch-missile" class="touch-btn" type="button" aria-label="Fire missile">MISSILE</button>
+</div>
+
+<!-- Main menu -->
+<div id="menu" class="overlay">
+  <div class="panel panel-menu">
+    <h1>NEON TALON</h1>
+    <p class="tagline">Fly the canyon. Manage your heat. Break the carriers.</p>
+    <p id="webgl-error" class="webgl-error hidden">3D graphics couldn't start in this browser — Neon Talon needs WebGL. Try a recent Chrome, Edge or Firefox on a device with graphics support.</p>
+    <div class="menu-col menu-actions">
+      <button id="btn-play" class="btn primary" type="button">Play</button>
+      <button id="btn-howto" class="btn" type="button">How to Play</button>
+      <button id="btn-settings" class="btn" type="button">Settings</button>
+      <button id="btn-mute-menu" class="btn small" type="button">Sound: On</button>
+      <p id="menu-best" class="menu-best"></p>
+    </div>
+    <div class="menu-col menu-setup">
+      <div id="sortie-select" class="map-select" aria-label="Sortie select"></div>
+      <p id="sortie-hint" class="map-hint"></p>
+    </div>
+  </div>
+</div>
+
+<!-- How to play -->
+<div id="howto" class="overlay hidden">
+  <div class="panel">
+    <h2>How to Play</h2>
+    <ul class="howto-list">
+      <li><strong>Fly the canyon.</strong> Steer with the mouse or <strong>WASD / arrows</strong>. The canyon walls scrape your hull — stay off the rock.</li>
+      <li><strong>Boost</strong> with <strong>Shift</strong> to close the gap — but boost builds <strong>heat</strong>. At full heat you overheat: boost locks out and your guns fire half as fast until you cool down. Every burst is a decision.</li>
+      <li><strong>Guns</strong> fire with <strong>Space</strong> or by holding the mouse button. Aim by pointing your nose at the target — steering IS aiming.</li>
+      <li><strong>Missiles</strong> need a lock: hold a target inside the reticle for a second until it turns gold, then fire with <strong>E</strong> or right-click. One missile per lock — re-lock to fire again.</li>
+      <li><strong>Drones</strong> drift into your lane and ram. <strong>Interceptors</strong> strafe and shoot. <strong>Turrets</strong> guard the walls. <strong>Carriers</strong> are gun-armoured and fill the canyon — you cannot slip past one. Break it with missiles.</li>
+      <li>Reach the end of the canyon alive to clear the sortie. Score comes from kills, time and hull left. Your best result is saved per sortie — beat it.</li>
+    </ul>
+    <h3>Controls</h3>
+    <ul class="howto-list">
+      <li>Mouse / WASD / arrows: steer &middot; Shift: boost &middot; Space / click: fire guns</li>
+      <li>E / right-click: fire missile (needs a lock) &middot; P: pause &middot; M: mute &middot; R: restart</li>
+      <li>Touch: drag to steer &middot; FIRE / BOOST / MISSILE buttons</li>
+    </ul>
+    <button id="btn-howto-close" class="btn primary" type="button">Got it</button>
+  </div>
+</div>
+
+<!-- Settings -->
+<div id="settings" class="overlay hidden">
+  <div class="panel">
+    <h2>Settings</h2>
+    <label class="slider-row">Volume
+      <input id="volume-range" type="range" min="0" max="100" value="60" aria-label="Volume">
+      <span id="volume-value">60%</span>
+    </label>
+    <label class="slider-row">Screen shake
+      <input id="shake-range" type="range" min="0" max="100" value="100" aria-label="Screen shake strength">
+      <span id="shake-value">100%</span>
+    </label>
+    <label class="toggle-row">Music
+      <input id="music-toggle" type="checkbox" checked aria-label="Music on or off">
+    </label>
+    <label class="toggle-row">Sound effects
+      <input id="sfx-toggle" type="checkbox" checked aria-label="Sound effects on or off">
+    </label>
+    <label class="toggle-row">Reduce flashing
+      <input id="reduce-flashing" type="checkbox" aria-label="Reduce flashing — no bright flashes">
+    </label>
+    <label class="slider-row">Text size
+      <select id="text-size-select" aria-label="Text size">
+        <option value="1">Normal</option>
+        <option value="1.2">Large</option>
+        <option value="1.4">Extra large</option>
+      </select>
+    </label>
+    <label class="toggle-row">High contrast
+      <input id="high-contrast-toggle" type="checkbox" aria-label="High contrast — brighter text and panels">
+    </label>
+    <button id="btn-settings-close" class="btn primary" type="button">Back to Menu</button>
+  </div>
+</div>
+
+<!-- Sortie complete -->
+<div id="complete" class="overlay hidden">
+  <div class="panel">
+    <h2>Sortie Clear</h2>
+    <p id="complete-score" class="big-score">Score 0</p>
+    <p id="complete-detail"></p>
+    <p id="complete-best" class="complete-best"></p>
+    <button id="btn-next" class="btn primary" type="button">Next Sortie</button>
+    <button id="btn-replay" class="btn" type="button">Fly Again</button>
+    <button id="btn-menu-complete" class="btn" type="button">Main Menu</button>
+  </div>
+</div>
+
+<!-- Sortie lost -->
+<div id="sortielost" class="overlay hidden">
+  <div class="panel">
+    <h2>Sortie Lost</h2>
+    <p id="sortielost-text">Your interceptor went down in the canyon.</p>
+    <p id="sortielost-stats" class="maplost-stats"></p>
+    <p id="sortielost-best" class="complete-best"></p>
+    <button id="btn-retry" class="btn primary" type="button">Fly Again</button>
+    <button id="btn-menu-sortielost" class="btn" type="button">Main Menu</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div id="pause" class="overlay hidden">
+  <div class="panel">
+    <h2>Paused</h2>
+    <button id="btn-resume" class="btn primary" type="button">Resume</button>
+    <button id="btn-restart" class="btn" type="button">Restart Sortie</button>
+    <button id="btn-quit" class="btn" type="button">Quit to Menu</button>
+    <label class="slider-row">Screen shake
+      <input id="shake-range-pause" type="range" min="0" max="100" value="100" aria-label="Screen shake strength">
+      <span id="shake-value-pause">100%</span>
+    </label>
+    <button id="btn-mute-pause" class="btn small" type="button">Sound: On</button>
+  </div>
+</div>
+
+<script type="module" src="game.js"></script>
+</body>
+</html>
