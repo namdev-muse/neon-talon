@@ -1,4 +1,4 @@
-// Neon Talon v0.1.0 — 3D neon aerial dogfighter (Three.js 0.160.0).
+// Neon Talon v0.1.1 — 3D neon aerial dogfighter (Three.js 0.160.0).
 // Fly a neon interceptor through canyon runs; guns and lock-on
 // missiles take down drones, interceptors and turrets; boost builds
 // heat, and heat management is the skill. Carriers fill the canyon
@@ -36,12 +36,16 @@ function applyAccessibility() {
 
 // ---------- FPS guard ----------
 let perfLevel = 0;
+let perfToastShown = false;
 let lowFpsSince = null;
 function fullPixelRatio() { return Math.min(window.devicePixelRatio || 1, 2); }
 function applyPerfLevel(level, { silent = false } = {}) {
   perfLevel = clamp(Math.floor(level) || 0, 0, PERF_LEVELS.length - 1);
   if (renderer) renderer.setPixelRatio(fullPixelRatio() * PERF_LEVELS[perfLevel]);
-  if (!silent && perfLevel > 0) toast('Performance mode — lowered detail to keep the action smooth');
+  if (!silent && perfLevel > 0 && !perfToastShown) {
+    perfToastShown = true;
+    toast('Performance mode — lowered detail to keep the action smooth');
+  }
 }
 function resetPerf() {
   perfLevel = 0;
@@ -218,7 +222,16 @@ let boostHeld = false;
 
 // Input state (keyboard + mouse + touch, merged every frame).
 const keys = new Set();
-const mouseSteer = { active: false, x: 0, y: 0 };
+const mouseSteer = { active: false, x: 0, y: 0, refX: null, refY: null };
+// Last pointer position anywhere on the page, so a run can centre
+// mouse steering on where the mouse actually is at launch (v0.1.1:
+// after clicking Play the cursor sat off-centre and the ship steered
+// into a wall before the player touched anything).
+const lastPointer = { x: null, y: null };
+window.addEventListener('pointermove', (e) => {
+  lastPointer.x = e.clientX;
+  lastPointer.y = e.clientY;
+}, { passive: true });
 let fireHeld = false, boostKeyHeld = false;
 let touchSteer = null; // {x, y} drag vector or null
 let touchFire = false, touchBoost = false;
@@ -262,8 +275,8 @@ const MATS = {
   canyon: new THREE.MeshStandardMaterial({ color: 0x3a2566, roughness: 0.95, metalness: 0.05 }),
   floor: new THREE.MeshStandardMaterial({ color: 0x241448, roughness: 0.95, metalness: 0.05 }),
   rock: new THREE.MeshStandardMaterial({ color: 0x3b2568, roughness: 1, metalness: 0 }),
-  ship: new THREE.MeshStandardMaterial({ color: 0x22d3ee, roughness: 0.35, metalness: 0.6, emissive: 0x0e7490, emissiveIntensity: 0.9 }),
-  shipWing: new THREE.MeshStandardMaterial({ color: 0x0e7490, roughness: 0.4, metalness: 0.6, emissive: 0x155e75, emissiveIntensity: 0.5 }),
+  ship: new THREE.MeshStandardMaterial({ color: 0x22d3ee, roughness: 0.35, metalness: 0.6, emissive: 0x0e7490, emissiveIntensity: 1.2 }),
+  shipWing: new THREE.MeshStandardMaterial({ color: 0x0e7490, roughness: 0.4, metalness: 0.6, emissive: 0x155e75, emissiveIntensity: 0.7 }),
   cockpit: new THREE.MeshStandardMaterial({ color: 0x67e8f9, roughness: 0.1, metalness: 0.2, emissive: 0x22d3ee, emissiveIntensity: 1.4 }),
   engine: new THREE.MeshBasicMaterial({ color: 0x67e8f9 }),
   drone: new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.3, metalness: 0.4, emissive: 0xbe185d, emissiveIntensity: 1.2 }),
@@ -560,7 +573,7 @@ function updateParticles(dt) {
 function pushFeedback(type) {
   const layers = FEEDBACK_LAYERS[type] || [];
   feedbackLog.push({ type, layers: [...layers] });
-  if (feedbackLog.length > 50) feedbackLog.shift();
+  if (feedbackLog.length > 200) feedbackLog.shift();
   return layers;
 }
 function applyFeedback(type, ev) {
@@ -592,6 +605,28 @@ function toast(msg) {
   clearTimeout(toast._t);
   toast._t = setTimeout(() => el.classList.remove('show'), 2400);
   $('sr-status').textContent = msg;
+}
+// Directional damage edge (v0.1.1, live-playtest fix): a hit must say
+// WHERE it came from — a red wash on the edge the damage came through
+// (wall side, or ahead for rams/shots). The old hit-flash alone was
+// too easy to miss while watching the ship.
+let lastWallToast = 0;
+function damageDir(ev) {
+  if (ev.source === 'wall' && run) {
+    const seg = segmentAt(sortie, run.z);
+    if (run.x <= seg.cx - seg.hw + 2) return 'left';
+    if (run.x >= seg.cx + seg.hw - 2) return 'right';
+    if (run.y <= seg.floor + 2) return 'bottom';
+    if (run.y >= seg.ceil - 2) return 'top';
+  }
+  return 'top'; // rams, shots, bumps and the carrier grind all come from ahead
+}
+function flashDamageEdge(dir) {
+  const el = $('dmg-edge');
+  if (!el) return;
+  el.className = 'dmg-edge';
+  void el.offsetWidth;
+  el.className = `dmg-edge on from-${dir}`;
 }
 function popAt(x, y, z, text, cls = '') {
   const p = projectToScreen(x, y, -(z - (run ? run.z : 0)));
@@ -654,18 +689,29 @@ function handleEvents(evs) {
         applyFeedback('playerHit', ev);
         sfx('hit');
         spawnBurst(run.x, run.y, 0, 'magenta', 8, 7, 0.5);
+        flashDamageEdge(damageDir(ev));
+        if (ev.damage >= 1) popAt(run.x, run.y, run.z, `-${Math.round(ev.damage)}`, 'damage');
         break;
       }
       case 'ram': {
         applyFeedback('playerHit', ev);
         sfx('hit');
         spawnBurst(ev.x, ev.y, -(ev.z - run.z), 'magenta', 14, 9, 0.6);
+        flashDamageEdge('top');
         break;
       }
       case 'wallScrape': {
         applyFeedback('wallScrape', ev);
         sfx('hit');
         spawnBurst(ev.x, ev.y, -(ev.z - run.z), 'violet', 5, 5, 0.4);
+        flashDamageEdge(damageDir({ source: 'wall' }));
+        // Warn once per run (then at most every 4s): the first scrape
+        // must teach, not just tax the hull silently.
+        const now = performance.now();
+        if (now - lastWallToast > 4000) {
+          lastWallToast = now;
+          toast('Wall scrape — steer back to the centre of the canyon');
+        }
         break;
       }
       case 'overheat': {
@@ -848,6 +894,13 @@ function startSortie(id) {
   buildCanyon(s);
   clearEnemyMeshes();
   feedbackLog = [];
+  // Centre mouse steering on the cursor's launch position (v0.1.1):
+  // wherever the mouse rests after clicking Play is neutral.
+  mouseSteer.active = false;
+  mouseSteer.x = 0; mouseSteer.y = 0;
+  mouseSteer.refX = lastPointer.x ?? window.innerWidth / 2;
+  mouseSteer.refY = lastPointer.y ?? window.innerHeight / 2;
+  lastWallToast = 0;
   phase = 'run';
   screenStack = [];
   for (const sc of SCREENS) $(sc).classList.add('hidden');
@@ -957,9 +1010,13 @@ if (renderer) {
   const canvas = renderer.domElement;
   canvas.addEventListener('pointermove', (e) => {
     if (phase !== 'run' || paused) return;
+    // Spawn-relative steering: the mouse position at launch is neutral,
+    // so the ship flies straight until the player actually moves the
+    // mouse. Steering is relative to that launch position, not to the
+    // screen centre.
     mouseSteer.active = true;
-    mouseSteer.x = clamp((e.clientX / window.innerWidth) * 2 - 1, -1, 1);
-    mouseSteer.y = clamp(-((e.clientY / window.innerHeight) * 2 - 1), -1, 1);
+    mouseSteer.x = clamp((e.clientX - mouseSteer.refX) / (window.innerWidth * 0.35), -1, 1);
+    mouseSteer.y = clamp(-((e.clientY - mouseSteer.refY) / (window.innerHeight * 0.35)), -1, 1);
   });
   canvas.addEventListener('pointerdown', (e) => {
     if (phase !== 'run' || paused) return;
@@ -1145,8 +1202,16 @@ function frame(t) {
           run = demoRun;
         }
       } else {
-        if (autoPilot) driveAutopilot(run);
-        else {
+        // Autopilot drives the input — but a queued missile (E key,
+        // right-click, touch button, or the __talon.fireMissile hook)
+        // must still fire on the lock. v0.1.1: the queue was only
+        // consumed in the manual-input branch, so fireMissile() was
+        // dead while the autopilot flew — the render check caught it
+        // when the bot stopped firing at turrets on its own.
+        if (autoPilot) {
+          driveAutopilot(run);
+          if (missileQueued) { run.input.missile = true; missileQueued = false; }
+        } else {
           const inp = computeInput();
           if (inp) {
             if (missileQueued) { inp.missile = true; missileQueued = false; }
@@ -1276,6 +1341,7 @@ window.__talon = {
       projectiles: r.projectiles.map((p) => ({ x: p.x, y: p.y, z: p.z, screen: projectToScreen(p.x, p.y, -(p.z - r.z)) })),
       missiles: r.missiles.map((m) => ({ x: m.x, y: m.y, z: m.z, targetId: m.targetId })),
       input: { ...r.input },
+      mouseRef: { x: mouseSteer.refX, y: mouseSteer.refY },
       trauma, timeScale, fov: camera.fov, fovPulse,
       shakeAmp: trauma * trauma * shakeStrength,
       perf: { fps: Math.round(fpsEma), pixelRatio: renderer ? renderer.getPixelRatio() : null, level: perfLevel },

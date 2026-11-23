@@ -14,7 +14,7 @@
 // real flying decisions: a bot that flies straight and holds fire
 // LOSES on every sortie (see tests/bot.js).
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 export const DT = 1 / 60;
 export const HULL_MAX = 100;
 export const HEAT_MAX = 100;
@@ -27,7 +27,7 @@ export const GUN_RATE = 8; // shots per second
 export const GUN_DAMAGE = 6;
 export const GUN_RANGE = 70;
 export const GUN_HEAT_PER_SHOT = 0.9;
-export const LOCK_TIME = 1.0; // seconds the target must stay in the reticle
+export const LOCK_TIME = 0.8; // seconds the target must stay in the reticle
 export const LOCK_RANGE = 80;
 export const MISSILE_DAMAGE = 90;
 export const MISSILE_SPEED = 95;
@@ -315,7 +315,7 @@ export function reticleT(run, e) {
   if (t < 0 || t > LOCK_RANGE) return null;
   const lx = rx - a.x * t, ly = ry - a.y * t, lz = rz - a.z * t;
   const lat = Math.hypot(lx, ly, lz);
-  if (lat > 1.4 + t * 0.03 + (ENEMY_DEFS[e.type].r ?? 0)) return null;
+  if (lat > 1.9 + t * 0.04 + (ENEMY_DEFS[e.type].r ?? 0)) return null;
   return t;
 }
 function spawnEnemy(run, spec) {
@@ -372,6 +372,12 @@ function damageEnemy(run, e, dmg, events, source) {
 
 function damagePlayer(run, dmg, events, source) {
   if (run.done) return;
+  // Spawn protection (v0.1.1, live-playtest fix): the opening teaches,
+  // it doesn't punish. For the first 4 seconds no damage lands — a
+  // new player reading the screen or centring the mouse isn't killed
+  // before they start flying. Rams and shots still fire their feedback
+  // events (the caller pushes those separately), so the threat reads.
+  if (run.time < 4) return;
   run.hull -= dmg;
   events.push({ type: 'playerHit', damage: dmg, source, hull: Math.max(0, run.hull) });
   if (run.hull <= 0) {
@@ -505,7 +511,7 @@ export function stepRun(run, dt = DT) {
       events.push({ type: 'lockAcquired', targetId: retTarget.id, kind: retTarget.type });
     }
   } else {
-    run.lockT = Math.max(0, run.lockT - dt * 2);
+    run.lockT = Math.max(0, run.lockT - dt * 1.5);
     if (run.lockT === 0) run.lockTargetId = null;
     if (run.lockedId !== null) {
       run.lockLoseT += dt;
@@ -863,10 +869,16 @@ export function decisionInput(run) {
   const enemyNear = run.enemies.some((e) => e.z - run.z > 0 && e.z - run.z < 45);
   const shotNear = run.projectiles.some((p) => Math.hypot(p.x - run.x, p.y - run.y, p.z - run.z) < 30);
   input.boost = !run.overheated && run.heat < 55 && !enemyNear && !shotNear;
-  // Missile the moment a carrier or turret locks.
+  // Missile the moment a carrier locks. Turrets are gun targets too
+  // (70 HP) — spending a 90-damage missile on one starves the
+  // carrier budget (3 missiles per 260-HP carrier), and the wider
+  // v0.1.1 lock cone made the bot do exactly that: it burned 3
+  // missiles on turrets before the first carrier, reached the second
+  // carrier with 0 ammo, and died grinding against it (trace:
+  // t=28.9 blocked, hull 63 -> 0 by t=39.0).
   if (run.lockedId !== null && run.ammo > 0) {
     const locked = run.enemies.find((e) => e.id === run.lockedId);
-    if (locked && (locked.type === 'carrier' || locked.type === 'turret' || locked.type === 'interceptor')) {
+    if (locked && locked.type === 'carrier') {
       input.missile = true;
     }
   }

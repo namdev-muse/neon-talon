@@ -176,11 +176,19 @@ body {
 }
 .hit-flash {
   position: fixed; inset: 0; z-index: 14; pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(251, 113, 133, 0.55) 100%);
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(251, 113, 133, 0.7) 100%);
   opacity: 0;
 }
 .hit-flash.on { animation: flash-fade 0.45s ease-out both; }
 @keyframes flash-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
+/* Directional damage edge (v0.1.1): a red wash on the side the hit came from. */
+.dmg-edge { position: fixed; inset: 0; z-index: 13; pointer-events: none; opacity: 0; }
+.dmg-edge.on { animation: dmg-fade 0.6s ease-out both; }
+.dmg-edge.from-left { background: linear-gradient(to right, rgba(251, 113, 133, 0.65), transparent 32%); }
+.dmg-edge.from-right { background: linear-gradient(to left, rgba(251, 113, 133, 0.65), transparent 32%); }
+.dmg-edge.from-top { background: linear-gradient(to bottom, rgba(251, 113, 133, 0.65), transparent 32%); }
+.dmg-edge.from-bottom { background: linear-gradient(to top, rgba(251, 113, 133, 0.65), transparent 32%); }
+@keyframes dmg-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
 .low-lives {
   position: fixed; inset: 0; z-index: 9; pointer-events: none;
   background: radial-gradient(ellipse at center, transparent 62%, rgba(251, 113, 133, 0.35) 100%);
