@@ -211,3 +211,75 @@ started; the opening softening and the race fix below are this run's):
   "Performance mode" toast appears in the swiftshader shots (the FPS
   guard stepping down under the slow software renderer — once per
   session, as designed).
+
+## v0.1.3 — re-playtest NO-GO, steering is the fun blocker (2026-11-23, 15:30 run continued)
+
+Live v0.1.2 re-playtest (16:32–16:48 +07): NO-GO. The missile fix
+itself is CONFIRMED — E and right-click both fire on a gold lock,
+missile count drops, drones die in one hit (runs 1, 2, 6). Bests on
+a loss CONFIRMED (menu "Best score: 300 · Sorties cleared: 0/3").
+But sortie 1 was never cleared in 17 attempts (best 49%), the
+carrier was never reached, and the playtest's central complaint is
+the steering: the ship steers toward the mouse cursor, which sits
+far above the ship on screen, so holding the mouse on the tunnel
+mouth — the natural thing to aim at — makes the ship climb out of
+the canyon and scrape the wall (runs 12, 13, 15 died at 28% that
+way). Two of the four claimed fixes did not fully hold, verified
+against the shipped code:
+- "Canyon bends kill a straight ship in the opening": does NOT hold
+  — the shipped segments are straight (cx 0) to z=220 (31%), and the
+  straight-line bot dies at z=621. The playtest's deaths were its
+  own steering inputs (climbing), not the canyon. The underlying
+  experience — the steering model is unexplained and unintuitive —
+  is real.
+- "Wall scrape toast must not linger": PARTLY — v0.1.2 cleared the
+  text when the toast hides, but the pill stays visible on the death
+  screen until its 2.4s timer fires, and the text is still in the
+  page right after death. Real, one-line fix.
+Also: R did nothing on the death screen (verified — the keydown
+handler returns early in the menu phase, so R never reaches the
+restart switch), and Enter only worked when Fly Again happened to
+be focused. Enemy fire was the same pink as the drones
+(MATS.shot 0xf472b6), so at distance fire and enemies were
+indistinguishable. Opening damage (hull 100→70 by 18% with no
+return fire) is by design — drones punish passivity — and is left
+alone; the bot's S1 margin (hull 94) shows a flying player is fine.
+
+Fixes (v0.1.3):
+- Chase-the-cursor steering replaces spawn-relative steering: the
+  ship steers toward the cursor's position relative to the ship on
+  screen, so it flies where the player points and levels once it is
+  under the cursor; pointing at the tunnel mouth now climbs gently
+  and levels instead of climbing without limit. The spawn trap the
+  relative model fixed stays fixed — at launch the cursor sits over
+  the Play button, roughly under the ship, so steering starts near
+  zero. `lastPointer` / `refX` / `refY` / `mouseRef` removed.
+- `onRunEnd` hides the toast and clears its text immediately
+  (clearTimeout + remove 'show' + textContent='').
+- R and Enter now work from the death and complete screens (R
+  restarts the sortie; Enter on complete goes to the next sortie).
+  A held key no longer re-fires (the old menu branch had no repeat
+  guard, so a held Enter restarted the run repeatedly).
+- Enemy shots are hot orange (0xfb923c); drones stay pink. How to
+  Play now explains the steering model ("the ship steers toward
+  your cursor — put it where you want to fly") and that enemy fire
+  glows orange.
+
+Tests (final tree): node --check PASS (game, physics, all tests);
+smoke 162 checks PASS; bot PASS — decision clears all 3 (S1 23.8s
+score 4286 hull 94, S2 27.6s score 4095 hull 84, S3 33.9s score
+4367 hull 32), straight-line loses all 3 (S1 dies at z=621),
+guns-only loses all 3.
+- render-check: PASS on the first run, zero console errors. Mouse
+  steer works under chase-the-cursor (steerX -0.95 at the left
+  edge); the gun test passes with the mouse neutralised on the ship;
+  hook missile 8→7, manual E 7→6, autopilot clears sortie 1 (Score
+  4286), Next Sortie unlocks sortie 2, ?sortie=3 reaches Widow's
+  Spine, accessibility persists, FPS guard steps the pixel ratio.
+  NEW: R restarts from the death screen — the scrape toast was
+  live during the scrape and the death screen shows none, so the
+  toast fix was genuinely exercised, not vacuously passed.
+- Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
+  inspected by eye — no clipping or overlap. Portrait still leaves
+  a large empty sky band above the canyon (carried known issue);
+  canyon reads flat/stark in places (M3 visual-richness item).
