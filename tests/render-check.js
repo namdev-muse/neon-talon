@@ -1,4 +1,4 @@
-// Neon Talon v0.2.2 — headless browser render check.
+// Neon Talon v0.2.3 — headless browser render check.
 // Serves the game dir over local HTTP, loads it in a headless browser, and
 // asserts the M1 core, by hook and by eye:
 //   - the menu renders over a LIVE 3D scene (the attract demo actually
@@ -137,8 +137,8 @@ try {
   }
 
   const version = await page.evaluate(() => window.__talon.version);
-  if (version !== '0.2.2') fail(`expected version 0.2.2, got ${version}`);
-  console.log('render-check: game module initialised, version 0.2.2');
+  if (version !== '0.2.3') fail(`expected version 0.2.3, got ${version}`);
+  console.log('render-check: game module initialised, version 0.2.3');
 
   // WebGL context exists and the canvas is on screen.
   const gl = await page.evaluate(() => {
@@ -154,7 +154,7 @@ try {
   // text anywhere the player can see.
   const menuText = await page.textContent('#menu');
   if (!menuText.includes('NEON TALON')) fail('menu title missing');
-  if (menuText.includes('v0.1.0') || menuText.includes('v0.2.0') || menuText.includes('v0.2.1') || menuText.includes('v0.2.2') || menuText.includes('Three.js') || menuText.includes('0.160.0')) {
+  if (menuText.includes('v0.1.0') || menuText.includes('v0.2.0') || menuText.includes('v0.2.1') || menuText.includes('v0.2.2') || menuText.includes('v0.2.3') || menuText.includes('Three.js') || menuText.includes('0.160.0')) {
     fail('menu shows version/engine text — it must live in the README only');
   }
   const playClass = await page.getAttribute('#btn-play', 'class');
@@ -457,6 +457,15 @@ try {
 
   // Accessibility: text size + high contrast apply and persist.
   await page.evaluate(() => window.__talon.quitToMenu());
+  // v0.2.3: quitting to the menu must clear the screen-reader live
+  // region too — the v0.2.2 playtest found the last lock toast's
+  // text still sitting in the DOM/accessibility tree after quitting
+  // from a death, because toast() writes #sr-status and nothing
+  // ever cleared it. The ?sortie=8 autopilot run above fired lock
+  // toasts, so sr-status is non-empty before this quit.
+  const srAfterQuit = await page.evaluate(() => document.getElementById('sr-status').textContent);
+  if (srAfterQuit !== '') fail(`quitToMenu should clear the sr-status live region, got ${JSON.stringify(srAfterQuit)}`);
+  console.log('render-check: quitToMenu clears the sr-status live region');
   await page.evaluate(() => { window.__talon.setTextSize(1.2); window.__talon.setHighContrast(true); });
   const fs1 = await page.evaluate(() => document.documentElement.style.fontSize);
   if (fs1 !== '120%') fail(`text size should be 120%, got ${fs1}`);
