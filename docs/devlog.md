@@ -451,3 +451,52 @@ laid 8 cards out 2-across (the M1 CSS anticipated this); no CSS change.
   the bot dodges perfectly, so the human playtest is the real
   curve check; watch S5 for feeling like a breather and S7/S8
   for the three-carrier block grind.
+
+## v0.2.1 — M2 fix round (2026-11-23, 19:30 run)
+
+The 18:38 live playtest said NO-GO as a set: S4 GO with a tuning note,
+S5–S8 NO-GO on en-route attrition — the playtester died at 35/31/26/23%
+and never reached a carrier in 7/8 runs. The chokes were ordinary early
+encounters (cumulative DPS + scrape), not headline content, so the fix
+uses the spacing lever (Bastion lesson), not count cuts — no enemy
+removed anywhere:
+
+- S5 Verdant Rift: opening packs re-spaced 220/240/300/380 → 220/270/
+  350/430 (drone groups to 310/390, gate turret 420 → 450, first
+  carrier 460 → 480); opening bends softened ±7 → ±5 so the tunnel
+  mouth reads before the wall does.
+- S6 Azure Deep: first pinch softened (ceil 13 → 14, hw 8 → 9) and
+  the 320 turret moved to 300, so the turret and the drone x5 at 340
+  no longer arrive as one wall.
+- S7 Golden Maw: early turret pair split (160 → 175) and the 280/300/
+  320 cluster re-spaced to 290/320/350, gate turret 340 → 375, first
+  carrier 400 → 420.
+- S8 Void Crown: same treatment — pair split to 175, 280/300/320/340
+  cluster re-spaced to 290/320/350/380, gate turrets to 410/435,
+  opening bends ±7 → ±5.
+- Lock target named (game.js): the reticle label now reads
+  "LOCKING — DRONE" / "LOCK — CARRIER" (kind + state), so a gold lock
+  on an escort can never again be mistaken for a carrier lock — the
+  probe proved the missiles were fine, the label was the defect.
+
+### Test totals (v0.2.1, local tree)
+
+- node --check PASS (game, physics, all tests)
+- smoke: 205 checks PASS
+- bot: decision clears all 8 (hulls 94/72/60/56/74/57/61/55),
+  straight-line loses all 8, guns-only loses all 8
+- render-check: PASS on re-run (first run hit a one-off 5s timeout at
+  the ?sortie=8 step; an isolated probe confirmed start(8) works and
+  the re-run passed end to end — logged as a timing flake, not a
+  defect), zero console errors
+- Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
+  inspected by eye — the new lock label reads cleanly at all three
+  sizes ("LOCKING — DRONE" caught live in the shots); no clipping or
+  overlap; portrait still leaves a large empty sky band above the
+  canyon (carried known issue).
+
+### Known issues (v0.2.1)
+
+- M2 is NOT done until the re-playtest says GO on sorties 4–8 — the
+  re-playtest is delegated after the v0.2.1 push and its verdict
+  decides M2.
