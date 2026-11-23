@@ -1,4 +1,4 @@
-// Neon Talon v0.1.4 — 3D neon aerial dogfighter (Three.js 0.160.0).
+// Neon Talon v0.1.5 — 3D neon aerial dogfighter (Three.js 0.160.0).
 // Fly a neon interceptor through canyon runs; guns and lock-on
 // missiles take down drones, interceptors and turrets; boost builds
 // heat, and heat management is the skill. Carriers fill the canyon
@@ -792,6 +792,13 @@ function updateHUD() {
     }
   }
   [...pips.children].forEach((pip, i) => pip.classList.toggle('spent', i >= run.ammo));
+  // Carrier health bar (v0.1.5): when a carrier is ahead within
+  // firing range, show its hull so the player can tell the missiles
+  // are working — the v0.1.4 playtest reached the carrier, fired
+  // missiles, and never saw whether it was dying.
+  const carrier = run.enemies.find((e) => e.type === 'carrier' && e.z - run.z >= 0 && e.z - run.z <= 90);
+  $('carrier-bar').classList.toggle('hidden', !carrier);
+  if (carrier) $('carrier-fill').style.width = `${Math.max(0, (carrier.hp / carrier.maxHp) * 100)}%`;
   // Reticle lock ring.
   const lockRing = $('lock-ring');
   const frac = run.lockedId !== null ? 1 : clamp(run.lockT / LOCK_TIME, 0, 1);

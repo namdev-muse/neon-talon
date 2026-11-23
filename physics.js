@@ -14,7 +14,7 @@
 // real flying decisions: a bot that flies straight and holds fire
 // LOSES on every sortie (see tests/bot.js).
 
-export const VERSION = '0.1.4';
+export const VERSION = '0.1.5';
 export const DT = 1 / 60;
 export const HULL_MAX = 100;
 export const HEAT_MAX = 100;
@@ -643,7 +643,16 @@ export function stepRun(run, dt = DT) {
       e.x += clamp(run.x + hx - e.x, -1, 1) * 2.5 * dt;
       e.y += clamp(run.y + hy - e.y, -1, 1) * 2.5 * dt;
     } else if (e.type === 'interceptor') {
-      e.z -= 5 * dt;
+      // v0.1.5: escorts cannot close through their own carrier — while
+      // the ship is pressed against a carrier (blocked), they hold
+      // their distance and strafe instead of closing in to ram. The
+      // block is a missile problem, not a ram ambush: without this,
+      // the two escorts at the carrier ram the parked player for 24
+      // while the grind runs, and the teaching carrier is unkillable
+      // in the lock-build window. The guns-only bot still loses: the
+      // grind plus the escorts' shots still kill it long before its
+      // guns (30% armour) can finish 260 HP.
+      if (!run.blocked) e.z -= 5 * dt;
       e.x = e.baseX + Math.sin(run.time * 1.2 + e.phase) * 5;
       e.y = clamp(e.baseY + Math.sin(run.time * 0.9 + e.phase) * 2, 3, 14);
     } else if (e.type === 'carrier') {
@@ -680,12 +689,18 @@ export function stepRun(run, dt = DT) {
         if (run.done) return events;
       }
     }
+    // v0.1.5: a carrier's fan is silent for 3s after it first comes
+    // within firing range — a telegraphed arrival. The player must
+    // fly straight at the carrier to build the first lock, and the
+    // fan is aimed at the predicted position, so without a grace the
+    // approach punishes exactly the behaviour the fight asks for.
+    if (e.type === 'carrier' && e.graceUntil === undefined && dz < 90) e.graceUntil = run.time + 3;
     // Enemy fire: turrets, interceptors and carriers shoot when the
     // player is ahead in range. Shots lead the player with spread.
     // A carrier does not fan while it is blocking the canyon — the
     // grind is the pressure there; the fan is for the chase.
     const def = ENEMY_DEFS[e.type];
-    if (def.fireInterval && dz > -5 && dz < 90 && !(run.blocked && e.type === 'carrier')) {
+    if (def.fireInterval && dz > -5 && dz < 90 && !(run.blocked && e.type === 'carrier') && !(e.type === 'carrier' && run.time < (e.graceUntil ?? 0))) {
       e.fireCd -= dt;
       if (e.fireCd <= 0) {
         e.fireCd = def.fireInterval * (0.9 + run.rng() * 0.2);
