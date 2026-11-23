@@ -20,7 +20,7 @@ function check(name, cond) {
   else { failed++; failures.push(name); console.error('FAIL:', name); }
 }
 
-check('physics version is 0.1.2', VERSION === '0.1.2');
+check('physics version is 0.1.3', VERSION === '0.1.3');
 check('3 sorties defined', SORTIES.length === 3);
 check('sortie ids are 1..3 in order', SORTIES.every((s, i) => s.id === i + 1));
 check('every sortie has a name and a hint', SORTIES.every((s) => s.name && s.hint));

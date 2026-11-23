@@ -1,4 +1,4 @@
-// Neon Talon v0.1.2 — headless browser render check.
+// Neon Talon v0.1.3 — headless browser render check.
 // Serves the game dir over local HTTP, loads it in a headless browser, and
 // asserts the M1 core, by hook and by eye:
 //   - the menu renders over a LIVE 3D scene (the attract demo actually
@@ -137,8 +137,8 @@ try {
   }
 
   const version = await page.evaluate(() => window.__talon.version);
-  if (version !== '0.1.2') fail(`expected version 0.1.2, got ${version}`);
-  console.log('render-check: game module initialised, version 0.1.2');
+  if (version !== '0.1.3') fail(`expected version 0.1.3, got ${version}`);
+  console.log('render-check: game module initialised, version 0.1.3');
 
   // WebGL context exists and the canvas is on screen.
   const gl = await page.evaluate(() => {
@@ -255,10 +255,10 @@ try {
 
   // Space fires the guns; holding fire scores kills and the kill
   // feedback bundle fires in full. First neutralise mouse steering
-  // (v0.1.1: steering is relative to the launch position, so the
-  // mouse must sit on the ref point, not the screen centre).
-  const ref = await page.evaluate(() => window.__talon.info().mouseRef);
-  await page.mouse.move(ref.x, ref.y);
+  // (v0.1.3 chase-the-cursor: the neutral point is the ship itself,
+  // so the mouse must sit on the ship's screen position).
+  const shipScreen = await page.evaluate(() => window.__talon.info().ship.screen);
+  await page.mouse.move(shipScreen.x, shipScreen.y);
   await page.waitForTimeout(400);
   await page.keyboard.down(' ');
   await page.waitForFunction(() => {
@@ -429,6 +429,28 @@ try {
   if (prMenu !== pr0) fail(`menu should restore full pixel ratio (${prMenu} vs ${pr0})`);
   console.log(`render-check: FPS guard steps the pixel ratio (${pr0} -> ${pr2}) and the menu restores it`);
 
+  // R restarts from the death screen, and a toast live at death must
+  // not carry onto it (v0.1.3: R did nothing on the death screen; the
+  // scrape toast pill stayed visible there until its timer fired).
+  // Steer into the wall at 4x until the ship scrapes itself to death.
+  await page.evaluate(() => window.__talon.start(1));
+  await page.evaluate(() => { window.__talon.setSpeed(4); window.__talon.setInput({ steerX: 1, steerY: 0 }); });
+  await page.waitForFunction(() => window.__talon.info().feedback.some((f) => f.type === 'wallScrape'), null, { timeout: 60000 });
+  const toastLive = await page.evaluate(() => {
+    const el = document.getElementById('hud-toast');
+    return el.textContent !== '' || el.classList.contains('show');
+  });
+  await page.waitForFunction(() => window.__talon.state.phase === 'menu' && !document.querySelector('#sortielost').classList.contains('hidden'), null, { timeout: 60000 });
+  const toastAtDeath = await page.evaluate(() => {
+    const el = document.getElementById('hud-toast');
+    return { text: el.textContent, shown: el.classList.contains('show') };
+  });
+  if (toastAtDeath.text !== '' || toastAtDeath.shown) fail(`toast must be cleared on the death screen, got ${JSON.stringify(toastAtDeath)}`);
+  await page.keyboard.press('r');
+  await page.waitForFunction(() => window.__talon.state.phase === 'run' && window.__talon.state.sortieId === 1, null, { timeout: 5000 });
+  console.log(`render-check: R restarts from the death screen (scrape toast was ${toastLive ? 'live during the scrape' : 'not live when checked'} — death screen shows none)`);
+  await page.evaluate(() => window.__talon.quitToMenu());
+
   await page.waitForTimeout(500);
 } catch (err) {
   console.error('render-check: FAILED —', err.message);
@@ -448,4 +470,4 @@ if (errors.length) {
   for (const e of errors) console.error('  ' + e);
   process.exit(1);
 }
-console.log('render-check: PASS — zero console errors, menu + gates + screen-space steering + mouse steer + heat + guns + lock/missile + autopilot clear + pause + ?sortie= seed + accessibility + FPS guard all verified');
+console.log('render-check: PASS — zero console errors, menu + gates + screen-space steering + mouse steer + heat + guns + lock/missile + autopilot clear + pause + ?sortie= seed + accessibility + FPS guard + R restart from the death screen all verified');
