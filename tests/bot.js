@@ -1,4 +1,4 @@
-// Neon Talon v0.2.0 — bot harness: the decision bot plays every sortie
+// Neon Talon v0.2.1 — bot harness: the decision bot plays every sortie
 // to completion through the public setInput / stepRun hooks, and the
 // anti-slop gate asserts a bot that flies straight and holds fire
 // LOSES on every sortie. If the straight bot clears a sortie, the

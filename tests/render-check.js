@@ -1,4 +1,4 @@
-// Neon Talon v0.2.0 — headless browser render check.
+// Neon Talon v0.2.1 — headless browser render check.
 // Serves the game dir over local HTTP, loads it in a headless browser, and
 // asserts the M1 core, by hook and by eye:
 //   - the menu renders over a LIVE 3D scene (the attract demo actually
@@ -137,8 +137,8 @@ try {
   }
 
   const version = await page.evaluate(() => window.__talon.version);
-  if (version !== '0.2.0') fail(`expected version 0.2.0, got ${version}`);
-  console.log('render-check: game module initialised, version 0.2.0');
+  if (version !== '0.2.1') fail(`expected version 0.2.1, got ${version}`);
+  console.log('render-check: game module initialised, version 0.2.1');
 
   // WebGL context exists and the canvas is on screen.
   const gl = await page.evaluate(() => {
@@ -154,7 +154,7 @@ try {
   // text anywhere the player can see.
   const menuText = await page.textContent('#menu');
   if (!menuText.includes('NEON TALON')) fail('menu title missing');
-  if (menuText.includes('v0.1.0') || menuText.includes('v0.2.0') || menuText.includes('Three.js') || menuText.includes('0.160.0')) {
+  if (menuText.includes('v0.1.0') || menuText.includes('v0.2.0') || menuText.includes('v0.2.1') || menuText.includes('Three.js') || menuText.includes('0.160.0')) {
     fail('menu shows version/engine text — it must live in the README only');
   }
   const playClass = await page.getAttribute('#btn-play', 'class');
