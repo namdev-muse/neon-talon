@@ -1,4 +1,4 @@
-// Neon Talon v0.2.1 — 3D neon aerial dogfighter (Three.js 0.160.0).
+// Neon Talon v0.2.2 — 3D neon aerial dogfighter (Three.js 0.160.0).
 // Fly a neon interceptor through canyon runs; guns and lock-on
 // missiles take down drones, interceptors and turrets; boost builds
 // heat, and heat management is the skill. Carriers fill the canyon
@@ -616,6 +616,12 @@ function applyFeedback(type, ev) {
   return layers;
 }
 function toast(msg) {
+  // v0.2.2: no toast may ever show on the menu. The menu demo steps
+  // the sim without handleEvents, so it cannot fire one — but a toast
+  // fired in a run (scrape, overheat) must not survive a quit to the
+  // menu from pause, and the live playtest saw a scrape toast on the
+  // main menu once. Belt and braces with the quitToMenu clear below.
+  if (typeof phase !== 'undefined' && phase === 'menu') return;
   const el = $('hud-toast');
   el.textContent = msg;
   el.classList.add('show');
@@ -678,6 +684,16 @@ function handleEvents(evs) {
         const color = ev.kind === 'carrier' ? 'gold' : ev.kind === 'turret' ? 'violet' : 'magenta';
         spawnBurst(ev.x, ev.y, -(ev.z - run.z), color, ev.kind === 'carrier' ? 26 : 12, ev.kind === 'carrier' ? 12 : 8, 0.7);
         popAt(ev.x, ev.y, ev.z, `+${ev.score}`, ev.kind === 'carrier' ? 'gold' : '');
+        break;
+      }
+      case 'carrierDown': {
+        // v0.2.2: a carrier kill pays back hull — say so loudly, or
+        // the checkpoint reads as nothing happening. Gold pop at the
+        // ship plus a toast; the kill case already popped the +500
+        // score at the carrier.
+        sfx('clear');
+        toast(`CARRIER DOWN — hull +${ev.restored}`);
+        if (ev.restored > 0) popAt(run.x, run.y, run.z, `+${ev.restored} HULL`, 'gold');
         break;
       }
       case 'killStreak': {
@@ -1005,6 +1021,14 @@ function quitToMenu() {
   screenStack = [];
   for (const sc of SCREENS) $(sc).classList.add('hidden');
   $('hud').classList.add('hidden');
+  // v0.2.2: a toast showing when the player quits (e.g. pause ->
+  // quit right after a scrape) must not carry onto the menu — the
+  // live playtest saw a scrape toast on the main menu once. Same
+  // clear as onRunEnd.
+  clearTimeout(toast._t);
+  const toastEl = $('hud-toast');
+  toastEl.classList.remove('show');
+  toastEl.textContent = '';
   $('reticle').classList.add('hidden');
   $('touch-controls').classList.add('hidden');
   $('blocked-banner').classList.add('hidden');

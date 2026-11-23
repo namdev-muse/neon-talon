@@ -14,7 +14,7 @@
 // real flying decisions: a bot that flies straight and holds fire
 // LOSES on every sortie (see tests/bot.js).
 
-export const VERSION = '0.2.1';
+export const VERSION = '0.2.2';
 export const DT = 1 / 60;
 export const HULL_MAX = 100;
 export const HEAT_MAX = 100;
@@ -33,7 +33,22 @@ export const MISSILE_DAMAGE = 90;
 export const MISSILE_SPEED = 95;
 export const MISSILE_AMMO = 8;
 export const MISSILE_AMMO_MAX = 12;
-export const WALL_SCRAPE_DPS = 14;
+// v0.2.2: a carrier kill restores hull. Two live playtests showed
+// the same death spiral — the player arrives at a carrier with hull
+// 1–4 and dies parked during the DPS race, and the post-carrier
+// stretch finishes the job. A carrier is a checkpoint now, not just
+// a gate: killing one pays back 25 hull (capped at max) alongside
+// the +2 missiles, so a good carrier fight recovers the run instead
+// of ending it. It cannot rescue the anti-slop bots — neither the
+// straight-line bot nor the guns-only bot ever kills a carrier —
+// so the gates still bind on them.
+export const CARRIER_KILL_HULL = 25;
+export const WALL_SCRAPE_DPS = 10; // v0.2.2: 14 -> 10. Wall scrape
+// was the dominant death in the S8 playtest — 14 DPS kills a ship
+// in ~7s of contact, and a tap-only player (or a first-time human)
+// spends that long on the rock in the narrow canyons. 10 DPS still
+// taxes bad flying (10s of contact is a death) but stops the wall
+// being the run-ender on every bend.
 export const PROJECTILE_SPEED = 55;
 export const SAVE_VERSION = 1;
 
@@ -322,8 +337,14 @@ export const SORTIES = [
       { at: 260, type: 'turret', side: 'left', y: 8 },
       { at: 280, type: 'drone', count: 4, dx: 0, dy: 8, spread: 3 },
       { at: 300, type: 'turret', side: 'left', y: 13 },
-      { at: 340, type: 'drone', count: 5, dx: 0, dy: 12, spread: 4 },
-      { at: 380, type: 'interceptor', count: 3, dx: 0, dy: 12, spread: 5 },
+      // v0.2.2: the drone x5 @340 + interceptor x3 @380 cluster was
+      // the verified S6 choke — the human playtest died at 34%
+      // (z≈357) in all three attempts, and the straight bot loses at
+      // z=360 too. Split the drones 3+2 and push the interceptors to
+      // 385 so the threats arrive one at a time.
+      { at: 340, type: 'drone', count: 3, dx: 0, dy: 12, spread: 4 },
+      { at: 365, type: 'drone', count: 2, dx: 0, dy: 12, spread: 4 },
+      { at: 385, type: 'interceptor', count: 3, dx: 0, dy: 12, spread: 5 },
       { at: 400, type: 'turret', side: 'right', y: 12 },
       { at: 420, type: 'carrier', dx: 0, dy: 11 },
       { at: 420, type: 'interceptor', count: 2, dx: 4, dy: 12, spread: 3 },
@@ -641,7 +662,12 @@ function damageEnemy(run, e, dmg, events, source) {
   run.streak++;
   run.streakTimer = 3;
   run.bestStreak = Math.max(run.bestStreak, run.streak);
-  if (e.type === 'carrier') run.ammo = Math.min(run.ammo + 2, MISSILE_AMMO_MAX);
+  if (e.type === 'carrier') {
+    run.ammo = Math.min(run.ammo + 2, MISSILE_AMMO_MAX);
+    const restored = Math.min(CARRIER_KILL_HULL, HULL_MAX - run.hull);
+    run.hull = Math.min(HULL_MAX, run.hull + CARRIER_KILL_HULL);
+    events.push({ type: 'carrierDown', hull: run.hull, restored });
+  }
   clearLockOnRemoval(run, e);
   events.push({ type: 'kill', kind: e.type, x: e.x, y: e.y, z: e.z, score: def.score, streak: run.streak, source: source || 'guns' });
   if (run.streak >= 3) events.push({ type: 'killStreak', streak: run.streak, x: e.x, y: e.y, z: e.z });
@@ -939,12 +965,18 @@ export function stepRun(run, dt = DT) {
         if (run.done) return events;
       }
     }
-    // v0.1.5: a carrier's fan is silent for 3s after it first comes
+    // v0.1.5: a carrier's fan is silent for 4.5s after it first comes
     // within firing range — a telegraphed arrival. The player must
     // fly straight at the carrier to build the first lock, and the
     // fan is aimed at the predicted position, so without a grace the
     // approach punishes exactly the behaviour the fight asks for.
-    if (e.type === 'carrier' && e.graceUntil === undefined && dz < 90) e.graceUntil = run.time + 3;
+    // v0.2.2: 3s -> 4.5s. A lock is 0.8s and each re-lock 0.6s, so
+    // three missiles land inside ~2.5s for a clean lock — but a human
+    // who wobbles once needs a second lock-build, and at 3s the first
+    // fan arrived mid-re-lock and ended runs that had arrived at the
+    // carrier with single-digit hull. The fan still punishes anyone
+    // who lingers after the grace; the grace only covers the lock.
+    if (e.type === 'carrier' && e.graceUntil === undefined && dz < 90) e.graceUntil = run.time + 4.5;
     // Enemy fire: turrets, interceptors and carriers shoot when the
     // player is ahead in range. Shots lead the player with spread.
     // A carrier does not fan while it is blocking the canyon — the
