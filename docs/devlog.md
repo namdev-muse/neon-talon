@@ -109,3 +109,105 @@ lock-acquired toast, not a tutorial step). What was real, and fixed:
   M1 blocker.
 - No human has yet cleared a sortie in real time; the re-playtest of
   v0.1.1 decides M1.
+
+## v0.1.2 — re-playtest NO-GO, the missile race (2026-11-23, 15:30 run)
+
+The v0.1.1 re-playtest (live site, 14:27–15:22) said NO-GO again: sortie
+1 never cleared in 20+ runs (best 54%, 10 kills, score 1000). The
+blocking defect was **missiles cannot be fired** — E proven broken with
+a gold lock (count stayed 8/12), right-click strongly indicated. The
+other v0.1.1 fixes were all CONFIRMED (spawn steering neutral, spawn
+protection, easy lock, directional damage feedback). Two further
+findings: bests never updated (they were only written on a clear, so
+the menu said "Not flown yet" after dozens of flights), and the
+"Wall scrape" toast text lingered in the page text after the run.
+
+Diagnosis (this run, before fixing — verified, not assumed): a
+headless probe proved the E key path itself is FINE — a real keyboard
+E on a live carrier lock fires (ammo 8→7). The failure is a
+**lock-death race**: the player holds fire while locking, and the
+locked drone dies to their own gunfire — or rams — in the beat
+between the gold ring and the E press. Two holes:
+- Gunfire death cleared the lock (v0.1.1) with no memory, so E found
+  `lockedId === null`.
+- Ram despawn never touched the lock at all, so `lockedId` dangled at
+  a removed enemy while the reticle stayed gold with "LOCK" showing —
+  the exact symptom the playtest reported ("gold ring, E does
+  nothing").
+
+What v0.1.2 changes (all in the unpushed local tree when this run
+started; the opening softening and the race fix below are this run's):
+- **Lock memory.** A full lock whose target vanishes is remembered
+  for 0.75s; an E press in that window fires at the target now being
+  re-locked (needs 0.3s of re-lock credit — the credit a target
+  switch banks). One helper (`clearLockOnRemoval`) settles the lock
+  at all three removal sites: shot down, rammed, flown past. A lock
+  lost because the target left the reticle sets no memory — the 2.5s
+  lock grace already covers that. The lock was earned (a full 0.8s
+  hold) and the new target must be in the reticle, so this is a
+  transfer of an earned lock, not a free missile.
+- **Lock transfer + grace** (from the earlier v0.1.2 pass): a dying
+  lock target banks 0.4s of re-lock credit instead of zero; lock
+  grace 1.5s -> 2.5s.
+- **Teaching runway.** Sortie 1's opening is straight to z=220 and
+  the first bends are ±4, not ±6: in v0.1.1 the centre swung to +6 at
+  z=150, so a ship that hadn't started steering was already in the
+  scrape band the moment spawn protection ended. A straight ship
+  still never clears — it dies at the carrier block (z=621).
+- **Bests on a loss** (recordBest with cleared=false; unlocks stay
+  clear-gated) and **toast text cleared on hide**.
+- **Render check:** the manual-E regression test now waits for a
+  carrier/turret lock like the hook test — a drone lock re-races the
+  test at 4x, not the game. The first version of that test FAILED
+  (3 attempts, drone locks dying to gunfire/rams in the round-trip
+  window), which is what forced the race diagnosis above.
+- Smoke tests for the memory: gunfire death, ram death, no-memory
+  no-fire, sub-0.3s-credit no-fire.
+
+### Test totals (v0.1.2)
+
+- smoke: 162 checks PASS (incl. 10 new lock-memory checks + 2 new
+  teaching-runway checks)
+- bot: decision clears all 3 (S1 23.8s hull 94, S2 27.6s hull 84,
+  S3 33.9s hull 32), straight-line loses all 3 (S1 now at the carrier
+  block, z=621), guns-only loses all 3
+- render-check: run 1 — manual E PASSES (real keyboard E on a gold
+  carrier lock, ammo 8→7), autopilot clears sortie 1 (Score 4286 —
+  exactly the pure-sim bot's score, confirming the new opening),
+  Next Sortie unlocks sortie 2, P pause/resume PASS — then FAILED at
+  the `?sortie=3` seed step (line 357: phase never became 'run'
+  after `start(3)`). An isolated probe of that exact sequence
+  PASSES (`?sortie=3` → start(3) → phase 'run' immediately), so it
+  looks like a harness race, not a game bug; re-running the check to
+  confirm. Run 2: FAILED EARLIER, at the hook lock wait (line 285,
+  120s, no carrier/turret lock observed) — but the failure screenshot
+  shows "Sortie Clear, Score 4286": the autopilot HAD cleared sortie
+  1 during the wait. Root cause is a TEST bug, not a game bug: a
+  live `lockedId` is transient (the bot fires on a carrier lock
+  within a few frames; turret locks are rare because the bot flies
+  centre-lane and wall turrets sit outside the reticle cone), so
+  polling `state.lockedId` misses it under slow swiftshader
+  rendering. Also found while fixing: the clear step never
+  re-enabled the autopilot after the missile tests switched it off —
+  run 1's clear only worked because the manual-E missile happened to
+  finish the carrier and the final stretch is straight. Fixes: the
+  feedback log now carries the event `kind`, and both missile tests
+  observe the DURABLE lockAcquired event + PAUSE to freeze the sim
+  with the lock live + verify + fire; the clear step restarts with
+  the autopilot ON. Run 3: FAILED at the hook test — the turret-only
+  wait never resolved (3x120s): the bot never holds a wall turret in
+  the reticle at all. Final fix: the missile tests fly straight with
+  guns silent at 1x (no autopilot) — the first drones drift into the
+  reticle and lock in ~0.8s, and with no gunfire the lock lives
+  ~1.7s, ample for the pause-freeze. Run 4: PASS — zero console
+  errors; hook missile ammo 8→7, manual E ammo 7→6, autopilot
+  clears sortie 1 (Score 4286), Next Sortie unlocks sortie 2,
+  ?sortie=3 reaches Widow's Spine, accessibility persists, FPS guard
+  steps the pixel ratio. (The run-1 `?sortie=3` failure did not
+  recur — harness race, game flow proven by the probe and by run 4.)
+- Size sweep: menu + gameplay at 1280x720, 2560x1080, 1080x2340,
+  inspected by eye — no clipping or overlap. Portrait still leaves
+  a large empty sky band above the canyon (carried known issue); the
+  "Performance mode" toast appears in the swiftshader shots (the FPS
+  guard stepping down under the slow software renderer — once per
+  session, as designed).
